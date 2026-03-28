@@ -61,13 +61,21 @@ export function yearlyRangePosition(price: number, high: number, low: number): n
   return Math.max(0, Math.min(100, ((price - low) / range) * 100));
 }
 
-/** Signal based on MA crossover and price position */
-export function computeSignal(close: number, ma50: number, ma200: number): "buy" | "sell" | "hold" {
+/** Signal based on MA crossover and price position — aligned with entry grading (A-F) */
+export function computeSignal(close: number, ma50: number, ma200: number): "strong buy" | "buy" | "hold" | "sell" | "strong sell" {
   if (ma50 === 0 || ma200 === 0) return "hold";
-  // Price above both MAs + golden cross = buy
-  if (close > ma50 && ma50 > ma200) return "buy";
-  // Price below both MAs + death cross = sell
-  if (close < ma50 && ma50 < ma200) return "sell";
+  const goldenCross = ma50 > ma200;
+  const deathCross = ma50 < ma200;
+  const belowMa50 = close < ma50 * 0.98; // >2% below
+  const aboveMa50 = close > ma50 * 1.02; // >2% above
+  // Golden cross (uptrend) — dip below MA50 = strong buy (Grade A entry)
+  if (belowMa50 && goldenCross) return "strong buy";
+  // Golden cross — price near or above MA50 = buy
+  if (goldenCross) return "buy";
+  // Death cross — price chasing above MA50 = strong sell (Grade F entry)
+  if (aboveMa50 && deathCross) return "strong sell";
+  // Death cross — downtrend = sell
+  if (deathCross) return "sell";
   return "hold";
 }
 

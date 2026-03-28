@@ -21,7 +21,7 @@ export function InfoTip({ text, children }: { text?: string; children?: React.Re
           className="fixed z-[9999] pointer-events-none"
           style={{ top: rect.bottom + 6, left: rect.left + rect.width / 2, transform: "translateX(-50%)" }}
         >
-          <div className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-xs text-gray-300 font-normal normal-case w-60 shadow-xl leading-relaxed">
+          <div className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-xs text-gray-300 font-normal normal-case w-80 shadow-xl leading-relaxed">
             <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-800 border-l border-t border-gray-700 rotate-45" />
             {children ?? <span className="whitespace-pre-line font-mono">{text}</span>}
           </div>

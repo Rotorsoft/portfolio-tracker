@@ -27,12 +27,39 @@ export function TickerChart({ symbol, lots, cutoffDate }: { symbol: string; lots
   const chartData = prices.map((p) => {
     const buyLots = lots.filter((l) => l.transactionDate === p.date && l.type === "buy");
     const sellLots = lots.filter((l) => l.transactionDate === p.date && l.type === "sell");
+    const ma50AtDate = ma50Map.get(p.date) ?? null;
+    const ma200AtDate = ma200Map.get(p.date) ?? null;
+    // Aggregate lot info for tooltip
+    const buyInfo = buyLots.length > 0 ? buyLots.map((l) => `${l.quantity}@$${l.price}`).join(", ") : null;
+    const sellInfo = sellLots.length > 0 ? sellLots.map((l) => `${l.quantity}@$${l.price}`).join(", ") : null;
+    const buyVsMa50 = buyLots.length > 0 && ma50AtDate ? ((buyLots[0].price - ma50AtDate) / ma50AtDate * 100) : null;
+    // Grade: crossover is primary factor, price vs MA50 is secondary
+    // Uptrend (golden cross): A = dip below MA50, B = near/above MA50
+    // No trend: C
+    // Downtrend (death cross): D = below MA50 (falling knife), F = above MA50 (chasing)
+    let buyGrade: string | null = null;
+    if (buyLots.length > 0 && ma50AtDate) {
+      const vsMa50 = buyVsMa50!;
+      const ma200v = ma200Map.get(p.date) ?? 0;
+      const goldenCross = ma50AtDate > ma200v && ma200v > 0;
+      const deathCross = ma50AtDate < ma200v && ma200v > 0;
+      if (goldenCross && vsMa50 < -2) buyGrade = "A";
+      else if (goldenCross) buyGrade = "B";
+      else if (deathCross && vsMa50 > 2) buyGrade = "F";
+      else if (deathCross) buyGrade = "D";
+      else buyGrade = "C";
+    }
     return {
       date: p.date,
       close: p.close,
       volume: p.volume,
       buyMarker: buyLots.length > 0 ? buyLots[0].price : null,
       sellMarker: sellLots.length > 0 ? sellLots[0].price : null,
+      _buyInfo: buyInfo,
+      _sellInfo: sellInfo,
+      _buyVsMa50: buyVsMa50?.toFixed(1) ?? null,
+      _buyGrade: buyGrade,
+      _ma50: ma50AtDate,
       ma50: showMA ? (ma50Map.get(p.date) ?? null) : null,
       ma200: showMA ? (ma200Map.get(p.date) ?? null) : null,
       bbUpper: showBB ? (bbMap.get(p.date)?.upper ?? null) : null,
@@ -48,18 +75,16 @@ export function TickerChart({ symbol, lots, cutoffDate }: { symbol: string; lots
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-6">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-medium text-gray-400">{symbol} Price &amp; Entry Points</h3>
-        <div className="flex gap-2">
-          <button onClick={() => setShowMA(!showMA)}
-            className={`text-xs px-2 py-0.5 rounded ${showMA ? "bg-indigo-600/20 text-indigo-400" : "text-gray-600 hover:text-gray-400"}`}>
-            MA
-          </button>
-          <button onClick={() => setShowBB(!showBB)}
-            className={`text-xs px-2 py-0.5 rounded ${showBB ? "bg-purple-600/20 text-purple-400" : "text-gray-600 hover:text-gray-400"}`}>
-            BB
-          </button>
-        </div>
+      <div className="flex items-center gap-3 mb-4">
+        <h3 className="text-sm font-medium text-gray-400">{symbol} Price &amp; Transactions</h3>
+        <button onClick={() => setShowMA(!showMA)}
+          className={`text-xs px-2 py-0.5 rounded ${showMA ? "bg-amber-600/20 text-amber-400" : "text-gray-600 hover:text-gray-400"}`}>
+          Moving Avg
+        </button>
+        <button onClick={() => setShowBB(!showBB)}
+          className={`text-xs px-2 py-0.5 rounded ${showBB ? "bg-purple-600/20 text-purple-400" : "text-gray-600 hover:text-gray-400"}`}>
+          Bollinger
+        </button>
       </div>
       <ResponsiveContainer width="100%" height={300}>
         <ComposedChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
@@ -69,21 +94,50 @@ export function TickerChart({ symbol, lots, cutoffDate }: { symbol: string; lots
           <YAxis yAxisId="volume" orientation="right" tick={{ fontSize: 10, fill: "#475569" }}
             tickFormatter={(v: number) => v >= 1e6 ? `${(v / 1e6).toFixed(0)}M` : v >= 1e3 ? `${(v / 1e3).toFixed(0)}K` : `${v}`} />
           <Tooltip
-            contentStyle={{ backgroundColor: "#1e293b", border: "1px solid #334155", borderRadius: "8px", fontSize: "12px" }}
-            labelStyle={{ color: "#94a3b8" }}
-            labelFormatter={(d: string) => fmtDate(d)}
-            formatter={(value: number | null, name: string) => {
-              if (value == null) return ["", ""];
-              if (name === "volume") return [value >= 1e6 ? `${(value / 1e6).toFixed(1)}M` : `${(value / 1e3).toFixed(0)}K`, "Volume"];
-              if (name === "close") return [`$${value.toFixed(2)}`, "Close"];
-              if (name === "buyMarker") return [`$${value.toFixed(2)}`, "Buy"];
-              if (name === "sellMarker") return [`$${value.toFixed(2)}`, "Sell"];
-              if (name === "ma50") return [`$${value.toFixed(2)}`, "50-day MA"];
-              if (name === "ma200") return [`$${value.toFixed(2)}`, "200-day MA"];
-              if (name === "bbUpper") return [`$${value.toFixed(2)}`, "BB Upper"];
-              if (name === "bbLower") return [`$${value.toFixed(2)}`, "BB Lower"];
-              if (name === "bbMiddle") return [`$${value.toFixed(2)}`, "BB Middle"];
-              return [`${value}`, name];
+            content={({ active, payload, label }) => {
+              if (!active || !payload?.length) return null;
+              const d = payload[0]?.payload;
+              return (
+                <div className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-xs shadow-xl">
+                  <div className="text-gray-400 mb-1">{fmtDate(label)}</div>
+                  <div className="text-white">Close: ${d?.close?.toFixed(2)}</div>
+                  {d?._ma50 != null && <div className="text-amber-400">MA50: ${d._ma50.toFixed(2)}</div>}
+                  {d?.ma200 != null && <div className="text-red-400">MA200: ${d.ma200.toFixed(2)}</div>}
+                  {d?.volume != null && <div className="text-gray-500">Vol: {d.volume >= 1e6 ? `${(d.volume / 1e6).toFixed(1)}M` : `${(d.volume / 1e3).toFixed(0)}K`}</div>}
+                  {d?.bbUpper != null && <div className="text-purple-400 text-[10px]">BB: ${d.bbLower?.toFixed(2)} — ${d.bbUpper?.toFixed(2)}</div>}
+                  {d?._buyInfo && (
+                    <div className="mt-1 pt-1 border-t border-gray-700">
+                      <div className="flex items-center gap-2">
+                        <span className="text-emerald-400 font-medium">BUY {d._buyInfo}</span>
+                        {d._buyGrade && (
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            d._buyGrade === "A" ? "bg-emerald-500/20 text-emerald-400" :
+                            d._buyGrade === "B" ? "bg-emerald-500/10 text-emerald-400" :
+                            d._buyGrade === "C" ? "bg-amber-500/10 text-amber-400" :
+                            d._buyGrade === "D" ? "bg-red-500/10 text-red-400" :
+                            "bg-red-500/20 text-red-400"
+                          }`}>{d._buyGrade}</span>
+                        )}
+                      </div>
+                      {d._buyVsMa50 && <div className={`text-[10px] ${Number(d._buyVsMa50) > 0 ? "text-red-400" : "text-emerald-400"}`}>
+                        {Number(d._buyVsMa50) > 0 ? "+" : ""}{d._buyVsMa50}% vs MA50
+                      </div>}
+                      {d._buyGrade && <div className="text-[10px] text-gray-500">
+                        {d._buyGrade === "A" ? "Dip buy in uptrend" :
+                         d._buyGrade === "B" ? "Buying in uptrend" :
+                         d._buyGrade === "C" ? "No clear trend" :
+                         d._buyGrade === "D" ? "Buying in downtrend" :
+                         "Chasing in downtrend"}
+                      </div>}
+                    </div>
+                  )}
+                  {d?._sellInfo && (
+                    <div className="mt-1 pt-1 border-t border-gray-700">
+                      <div className="text-red-400 font-medium">SELL {d._sellInfo}</div>
+                    </div>
+                  )}
+                </div>
+              );
             }}
           />
           {cutoffDate && <ReferenceLine yAxisId="price" x={cutoffDate} stroke="#f59e0b" strokeDasharray="5 5" label={{ value: "Cutoff", fill: "#f59e0b", fontSize: 10, position: "insideTopRight" }} />}

@@ -316,7 +316,6 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                     { key: "unrealizedGL", label: "G/L", align: "right" },
                     { key: "unrealizedGLPercent", label: "G/L %", align: "right" },
                     { key: "lots", label: "Lots", align: "right" },
-                    { key: "signal", label: "Signal", align: "center" },
                   ].map((col) => (
                     <th key={col.key} onClick={() => toggleSort(col.key)}
                       className={`text-${col.align} px-4 py-3 text-xs text-gray-500 uppercase cursor-pointer hover:text-gray-300 select-none whitespace-nowrap`}>
@@ -358,6 +357,42 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                       </div>
                     </InfoTip>
                   </th>
+                  <th onClick={() => toggleSort("signal")}
+                    className="text-center px-4 py-3 text-xs text-gray-500 uppercase cursor-pointer hover:text-gray-300 select-none whitespace-nowrap">
+                    Signal{sortCol === "signal" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+                    <InfoTip>
+                      <div className="space-y-2">
+                        <div className="text-gray-300 font-medium">Trend Signal</div>
+                        <div className="text-gray-400 text-[11px] leading-tight">
+                          Combines 50-day and 200-day moving average crossover with current price position to gauge trend strength.
+                        </div>
+                        <table className="text-[11px] w-full border-spacing-y-1" style={{ borderCollapse: "separate" }}>
+                          <tbody>
+                            <tr>
+                              <td className="text-emerald-400 pr-3 font-bold whitespace-nowrap align-top">STRONG BUY</td>
+                              <td className="text-gray-300">Price pulled back &gt;2% below MA50 while MA50 &gt; MA200 (golden cross). Dip-buy opportunity in a confirmed uptrend.</td>
+                            </tr>
+                            <tr>
+                              <td className="text-emerald-400 pr-3 font-bold whitespace-nowrap align-top">BUY</td>
+                              <td className="text-gray-300">MA50 &gt; MA200 (golden cross). Uptrend intact — price near or above the 50-day average.</td>
+                            </tr>
+                            <tr>
+                              <td className="text-gray-400 pr-3 font-bold whitespace-nowrap align-top">HOLD</td>
+                              <td className="text-gray-300">Moving averages are converging or there is not enough price history. No clear directional signal.</td>
+                            </tr>
+                            <tr>
+                              <td className="text-red-400 pr-3 font-bold whitespace-nowrap align-top">SELL</td>
+                              <td className="text-gray-300">MA50 &lt; MA200 (death cross). Downtrend confirmed — price near or below the 50-day average.</td>
+                            </tr>
+                            <tr>
+                              <td className="text-red-400 pr-3 font-bold whitespace-nowrap align-top">STRONG SELL</td>
+                              <td className="text-gray-300">Price rallied &gt;2% above MA50 while MA50 &lt; MA200 (death cross). Chasing a bear-market bounce.</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </InfoTip>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -366,7 +401,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                     className="border-b border-gray-800/50 hover:bg-gray-800/30 cursor-pointer transition-colors">
                     <td className="px-4 py-3">
                       <span className="font-medium text-white">{pos.ticker}</span>
-                      {pos.tickerName && <span className="text-xs text-gray-500 ml-2">{pos.tickerName}</span>}
+                      {pos.tickerName && <div className="text-[10px] text-gray-600 truncate max-w-[200px]">{pos.tickerName}</div>}
                     </td>
                     <td className="px-4 py-3 text-right text-gray-300">{pos.totalShares.toLocaleString()}</td>
                     <td className="px-4 py-3 text-right text-gray-300">{fmt(pos.avgCostBasis)}</td>
@@ -375,13 +410,6 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                     <td className={`px-4 py-3 text-right font-medium ${glColor(pos.unrealizedGL)}`}>{fmt(pos.unrealizedGL)}</td>
                     <td className={`px-4 py-3 text-right font-medium ${glColor(pos.unrealizedGLPercent)}`}>{fmtPct(pos.unrealizedGLPercent)}</td>
                     <td className="px-4 py-3 text-right text-gray-500">{pos.lots}</td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
-                        pos.signal === "buy" ? "bg-emerald-500/10 text-emerald-400" :
-                        pos.signal === "sell" ? "bg-red-500/10 text-red-400" :
-                        "bg-gray-700 text-gray-400"
-                      }`}>{pos.signal?.toUpperCase()}</span>
-                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1">
                         <div className="w-12 h-1.5 bg-gray-700 rounded-full overflow-hidden">
@@ -394,6 +422,15 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                     </td>
                     <td className={`px-4 py-3 text-right text-xs font-medium ${pos.dcaSavingsPct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                       {pos.dcaSavingsPct >= 0 ? "+" : ""}{pos.dcaSavingsPct.toFixed(1)}%
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                        pos.signal === "strong buy" ? "bg-emerald-500/20 text-emerald-400" :
+                        pos.signal === "buy" ? "bg-emerald-500/10 text-emerald-400" :
+                        pos.signal === "strong sell" ? "bg-red-500/20 text-red-400" :
+                        pos.signal === "sell" ? "bg-red-500/10 text-red-400" :
+                        "bg-gray-700 text-gray-400"
+                      }`}>{pos.signal?.toUpperCase()}</span>
                     </td>
                   </tr>
                 ))}
