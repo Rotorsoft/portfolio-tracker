@@ -8,3 +8,8 @@ services:
       POSTGRES_PASSWORD: postgres
     ports:
       - "5479:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

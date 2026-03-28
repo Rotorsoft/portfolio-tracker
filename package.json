@@ -13,7 +13,9 @@
     "test": "vitest run",
     "typecheck": "npx tsc --noEmit --project tsconfig.json",
     "dev": "pnpm -F @portfolio-tracker/app dev:api & pnpm -F @portfolio-tracker/app dev:client",
-    "start": "pnpm -F @portfolio-tracker/app start"
+    "start": "pnpm -F @portfolio-tracker/app start",
+    "backup": "./scripts/backup-events.sh",
+    "restore": "./scripts/restore-events.sh"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.0.18",
