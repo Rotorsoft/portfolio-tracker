@@ -4,7 +4,7 @@ import { trpc } from "../trpc.js";
 import { DateInput } from "./DateInput.js";
 import { fmtDate, fmtDateShort } from "../fmt.js";
 
-export function WhatIfChart({ portfolioId, cutoffDate }: { portfolioId: string; cutoffDate: string }) {
+export function WhatIfChart({ portfolioId, cutoffDate, onSelectTicker }: { portfolioId: string; cutoffDate: string; onSelectTicker?: (ticker: string) => void }) {
   const [whatIfDate, setWhatIfDate] = useState(cutoffDate || "2024-01-02");
   const { data, isLoading } = trpc.getWhatIfComparison.useQuery(
     { portfolioId, whatIfDate, from: new Date(new Date(whatIfDate).getTime() - 7 * 86400000).toISOString().split("T")[0] },
@@ -16,9 +16,9 @@ export function WhatIfChart({ portfolioId, cutoffDate }: { portfolioId: string; 
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center gap-2 mb-4">
         <h3 className="text-sm font-medium text-gray-400">
-          What If I Bought Everything On...
+          What If I Bought Everything On
         </h3>
         <DateInput value={whatIfDate} onChange={setWhatIfDate} />
       </div>
@@ -78,7 +78,7 @@ export function WhatIfChart({ portfolioId, cutoffDate }: { portfolioId: string; 
               {data.positions.map((p) => {
                 const diff = p.actualCost - p.whatIfCost;
                 return (
-                  <div key={p.ticker} className="bg-gray-800/50 rounded-lg p-3">
+                  <div key={p.ticker} className={`bg-gray-800/50 rounded-lg p-3${onSelectTicker ? " cursor-pointer hover:bg-gray-800 transition-colors" : ""}`} onClick={() => onSelectTicker?.(p.ticker)}>
                     <div className="text-sm font-medium text-white">{p.ticker}
                       <span className="text-xs text-gray-500 ml-1">{p.actualShares} shares</span>
                     </div>

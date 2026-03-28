@@ -1,20 +1,25 @@
-import { useState } from "react";
+import { LogOut, Briefcase, ScrollText } from "lucide-react";
 import { useAuth } from "../hooks/useAuth.js";
 import { useEventStream } from "../hooks/useEventStream.js";
+import { useNav } from "../hooks/useNav.js";
 import { useServerDown } from "../App.js";
 import { LoginForm } from "./LoginForm.js";
 import { PortfolioList } from "../views/PortfolioList.js";
 import { PortfolioDetail } from "../views/PortfolioDetail.js";
 import { EventLog } from "../views/EventLog.js";
 
-type Tab = "portfolios" | "events";
+const navTabs = [
+  { id: "portfolios" as const, label: "Portfolios", icon: <Briefcase size={14} /> },
+  { id: "events" as const, label: "Events", icon: <ScrollText size={14} /> },
+];
 
 export function Shell() {
   const { user, loading, signOut } = useAuth();
   const { events, connected } = useEventStream();
   const serverDown = useServerDown();
-  const [tab, setTab] = useState<Tab>("portfolios");
-  const [selectedPortfolio, setSelectedPortfolio] = useState<string | null>(null);
+  const { route, nav } = useNav();
+
+  const activeTab = route.page === "events" ? "events" : "portfolios";
 
   if (loading && !serverDown) {
     return (
@@ -46,11 +51,6 @@ export function Shell() {
 
   if (!user) return <LoginForm />;
 
-  const tabs: { id: Tab; label: string }[] = [
-    { id: "portfolios", label: "Portfolios" },
-    { id: "events", label: "Events" },
-  ];
-
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
       <header className="border-b border-gray-800 bg-gray-900/50 backdrop-blur-sm sticky top-0 z-50">
@@ -69,15 +69,15 @@ export function Shell() {
                 </h1>
               </div>
               <nav className="flex gap-1">
-                {tabs.map((t) => (
+                {navTabs.map((t) => (
                   <button
                     key={t.id}
-                    onClick={() => { setTab(t.id); setSelectedPortfolio(null); }}
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                      tab === t.id ? "bg-indigo-600 text-white" : "text-gray-400 hover:text-white hover:bg-gray-800"
+                    onClick={() => t.id === "portfolios" ? nav.toPortfolios() : nav.toEvents()}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                      activeTab === t.id ? "bg-indigo-600 text-white" : "text-gray-400 hover:text-white hover:bg-gray-800"
                     }`}
                   >
-                    {t.label}
+                    {t.icon} {t.label}
                   </button>
                 ))}
               </nav>
@@ -88,8 +88,8 @@ export function Shell() {
                 <span className="text-gray-500">{connected ? "Live" : "Disconnected"}</span>
               </div>
               <span className="text-sm text-gray-400">{user.name}</span>
-              <button onClick={signOut} className="text-sm text-gray-500 hover:text-gray-300 transition-colors">
-                Sign out
+              <button onClick={signOut} className="text-sm text-gray-500 hover:text-gray-300 transition-colors inline-flex items-center gap-1">
+                <LogOut size={14} /> Sign out
               </button>
             </div>
           </div>
@@ -97,16 +97,16 @@ export function Shell() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {tab === "portfolios" && !selectedPortfolio && (
-          <PortfolioList onSelect={setSelectedPortfolio} />
+        {route.page === "portfolios" && (
+          <PortfolioList onSelect={(id) => nav.toPortfolio(id)} />
         )}
-        {tab === "portfolios" && selectedPortfolio && (
+        {(route.page === "portfolio" || route.page === "position") && (
           <PortfolioDetail
-            portfolioId={selectedPortfolio}
-            onBack={() => setSelectedPortfolio(null)}
+            portfolioId={route.portfolioId}
+            onBack={() => nav.toPortfolioList()}
           />
         )}
-        {tab === "events" && <EventLog events={events} />}
+        {route.page === "events" && <EventLog events={events} />}
       </main>
     </div>
   );

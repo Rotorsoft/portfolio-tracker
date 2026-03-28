@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { ArrowLeft, Plus, Upload, Trash2, X } from "lucide-react";
+import { Tooltip } from "../components/Tooltip.js";
 import { trpc } from "../trpc.js";
 import { TickerChart } from "../components/TickerChart.js";
 import { DateInput } from "../components/DateInput.js";
@@ -215,7 +217,7 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
   return (
     <div>
       <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-300 mb-4 flex items-center gap-1">
-        &larr; Back to portfolio
+        <ArrowLeft size={14} /> Back to portfolio
       </button>
 
       <div className="flex items-start justify-between mb-4">
@@ -227,9 +229,9 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
         </div>
         <button
           onClick={() => setShowAdd(!showAdd)}
-          className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1"
         >
-          {showAdd ? "Cancel" : "Add Lot"}
+          {showAdd ? <><X size={14} /> Cancel</> : <><Plus size={14} /> Add Lot</>}
         </button>
       </div>
 
@@ -355,8 +357,8 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
                   className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500" />
               </div>
               <button type="submit" disabled={adding}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">
-                {adding ? "Adding..." : "Add Lot"}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 flex items-center gap-1">
+                {adding ? "Adding..." : <><Plus size={14} /> Add Lot</>}
               </button>
             </form>
           ) : (
@@ -370,8 +372,8 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
               />
               <p className="text-xs text-gray-600">Format: type, date, quantity, price, fees, notes</p>
               <button type="submit" disabled={adding}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">
-                {adding ? "Adding..." : "Add All Lots"}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 flex items-center gap-1">
+                {adding ? "Adding..." : <><Upload size={14} /> Add All Lots</>}
               </button>
             </form>
           )}
@@ -446,7 +448,7 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
                       </td>
                       <td className="px-4 py-2 text-gray-500 truncate max-w-[120px]">{lot.notes}</td>
                       <td className="px-4 py-2 text-right">
-                        <button onClick={() => handleRemoveLot(lot.id)} className="text-red-400 hover:text-red-300 text-xs">Remove</button>
+                        <Tooltip label="Remove lot"><button onClick={() => handleRemoveLot(lot.id)} className="text-red-400 hover:text-red-300"><Trash2 size={14} /></button></Tooltip>
                       </td>
                     </tr>
                   );
