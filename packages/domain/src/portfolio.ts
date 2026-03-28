@@ -157,6 +157,7 @@ function calcPositionStats(posLots: Lot[]) {
 /** Recalculate timing score and DCA comparison for a position */
 export async function recalcPositionAnalytics(positionId: string) {
   const { getTickerPrices } = await import("./ticker.js");
+  const { smaAtDate, maxDrawdownSince, countDaysBelow, yearlyRange, yearlyRangePosition } = await import("./indicators.js");
   const pos = await db().select().from(positions).where(eq(positions.id, positionId));
   if (pos.length === 0) return;
   const ticker = pos[0].ticker;
@@ -171,7 +172,10 @@ export async function recalcPositionAnalytics(positionId: string) {
   const relevant = allPrices.filter((p) => p.date >= firstDate);
 
   if (relevant.length === 0) {
-    await db().update(positions).set({ timingScore: 50, dcaSavingsPct: 0, periodAvg: 0, periodLow: 0, periodHigh: 0 }).where(eq(positions.id, positionId));
+    await db().update(positions).set({
+      timingScore: 50, dcaSavingsPct: 0, periodAvg: 0, periodLow: 0, periodHigh: 0,
+      ma50AtEntry: 0, ma200AtEntry: 0, entryVsMa50: 0, maxDrawdown: 0, daysUnderwater: 0, yearlyRangePct: 50,
+    }).where(eq(positions.id, positionId));
     return;
   }
 
@@ -181,10 +185,9 @@ export async function recalcPositionAnalytics(positionId: string) {
   const range = periodHigh - periodLow;
 
   const avgEntry = pos[0].avgCostBasis ?? 0;
-  // 100% = bought at the low (best), 0% = bought at the high (worst)
   const timingScore = range > 0 ? Math.max(0, Math.min(100, 100 - ((avgEntry - periodLow) / range) * 100)) : 50;
 
-  // DCA: average price over the lot date range
+  // DCA comparison
   const dcaPrices = allPrices.filter((p) => p.date >= firstDate && p.date <= lastDate);
   const dcaAvgPrice = dcaPrices.length > 0 ? dcaPrices.reduce((s, p) => s + p.close, 0) / dcaPrices.length : avgEntry;
   const totalShares = buyLots.reduce((s, l) => s + l.quantity, 0);
@@ -192,7 +195,28 @@ export async function recalcPositionAnalytics(positionId: string) {
   const dcaCost = totalShares * dcaAvgPrice;
   const dcaSavingsPct = totalCost > 0 ? ((dcaCost - totalCost) / totalCost) * 100 : 0;
 
-  await db().update(positions).set({ timingScore, dcaSavingsPct, periodAvg, periodLow, periodHigh }).where(eq(positions.id, positionId));
+  // Entry-level indicators (weighted average of lot dates)
+  const weightedMa50 = buyLots.reduce((s, l) => s + l.quantity * smaAtDate(allPrices, 50, l.transactionDate), 0) / totalShares;
+  const weightedMa200 = buyLots.reduce((s, l) => s + l.quantity * smaAtDate(allPrices, 200, l.transactionDate), 0) / totalShares;
+  const entryVsMa50 = weightedMa50 > 0 ? ((avgEntry - weightedMa50) / weightedMa50) * 100 : 0;
+
+  // Drawdown and underwater days
+  const maxDd = maxDrawdownSince(allPrices, firstDate);
+  const underwater = countDaysBelow(allPrices, avgEntry, firstDate);
+
+  // Yearly range position
+  const yr = yearlyRange(allPrices);
+  const yrPct = yearlyRangePosition(avgEntry, yr.high, yr.low);
+
+  await db().update(positions).set({
+    timingScore, dcaSavingsPct, periodAvg, periodLow, periodHigh,
+    ma50AtEntry: Math.round(weightedMa50 * 100) / 100,
+    ma200AtEntry: Math.round(weightedMa200 * 100) / 100,
+    entryVsMa50: Math.round(entryVsMa50 * 100) / 100,
+    maxDrawdown: Math.round(maxDd * 100) / 100,
+    daysUnderwater: underwater,
+    yearlyRangePct: Math.round(yrPct * 100) / 100,
+  }).where(eq(positions.id, positionId));
 }
 
 // === Projection (Drizzle PG) ===

@@ -44,6 +44,13 @@ export const positions = pgTable("positions", {
   periodAvg: real("period_avg").notNull().default(0),
   periodLow: real("period_low").notNull().default(0),
   periodHigh: real("period_high").notNull().default(0),
+  // Technical indicators at entry (computed on backfill + lot changes)
+  ma50AtEntry: real("ma50_at_entry").notNull().default(0),
+  ma200AtEntry: real("ma200_at_entry").notNull().default(0),
+  entryVsMa50: real("entry_vs_ma50").notNull().default(0),
+  maxDrawdown: real("max_drawdown").notNull().default(0),
+  daysUnderwater: integer("days_underwater").notNull().default(0),
+  yearlyRangePct: real("yearly_range_pct").notNull().default(50),
 });
 
 export const lots = pgTable("lots", {
@@ -68,6 +75,13 @@ export const tickers = pgTable("tickers", {
   lastPriceDate: text("last_price_date").notNull().default(""),
   lastClose: real("last_close").notNull().default(0),
   registeredAt: text("registered_at").notNull().default(""),
+  // Technical indicators (computed on backfill)
+  ma50: real("ma50").notNull().default(0),
+  ma200: real("ma200").notNull().default(0),
+  volatility30d: real("volatility_30d").notNull().default(0),
+  yearlyHigh: real("yearly_high").notNull().default(0),
+  yearlyLow: real("yearly_low").notNull().default(0),
+  signal: text("signal").notNull().default("hold"),
 });
 
 export const prices = pgTable(

@@ -316,6 +316,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                     { key: "unrealizedGL", label: "G/L", align: "right" },
                     { key: "unrealizedGLPercent", label: "G/L %", align: "right" },
                     { key: "lots", label: "Lots", align: "right" },
+                    { key: "signal", label: "Signal", align: "center" },
                   ].map((col) => (
                     <th key={col.key} onClick={() => toggleSort(col.key)}
                       className={`text-${col.align} px-4 py-3 text-xs text-gray-500 uppercase cursor-pointer hover:text-gray-300 select-none whitespace-nowrap`}>
@@ -374,6 +375,13 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                     <td className={`px-4 py-3 text-right font-medium ${glColor(pos.unrealizedGL)}`}>{fmt(pos.unrealizedGL)}</td>
                     <td className={`px-4 py-3 text-right font-medium ${glColor(pos.unrealizedGLPercent)}`}>{fmtPct(pos.unrealizedGLPercent)}</td>
                     <td className="px-4 py-3 text-right text-gray-500">{pos.lots}</td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                        pos.signal === "buy" ? "bg-emerald-500/10 text-emerald-400" :
+                        pos.signal === "sell" ? "bg-red-500/10 text-red-400" :
+                        "bg-gray-700 text-gray-400"
+                      }`}>{pos.signal?.toUpperCase()}</span>
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1">
                         <div className="w-12 h-1.5 bg-gray-700 rounded-full overflow-hidden">

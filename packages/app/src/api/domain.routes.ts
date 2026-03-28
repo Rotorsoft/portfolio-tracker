@@ -162,6 +162,18 @@ export const domainRouter = t.router({
     }),
 
   // === Analytics ===
+  getChartOverlays: publicProcedure
+    .input(z.object({ symbol: z.string(), from: z.string().optional() }))
+    .query(async ({ input }) => {
+      const { maSeries, bollingerSeries } = await import("@portfolio-tracker/domain");
+      const prices = await getTickerPrices(input.symbol, input.from);
+      return {
+        ma50: maSeries(prices, 50),
+        ma200: maSeries(prices, 200),
+        bollinger: bollingerSeries(prices),
+      };
+    }),
+
   getPortfolioSummary: publicProcedure
     .input(z.object({ portfolioId: z.string() }))
     .query(async ({ input }) => {
@@ -171,7 +183,8 @@ export const domainRouter = t.router({
       const tickerSummaries: Array<{
         ticker: string; tickerName: string; totalShares: number; avgCostBasis: number; currentPrice: number;
         marketValue: number; unrealizedGL: number; unrealizedGLPercent: number; lots: number;
-        positionId: string; timingScore: number; dcaSavingsPct: number;
+        positionId: string; timingScore: number; dcaSavingsPct: number; signal: string;
+        maxDrawdown: number; daysUnderwater: number; yearlyRangePct: number; entryVsMa50: number;
       }> = [];
 
       for (const pos of positions) {
@@ -188,6 +201,9 @@ export const domainRouter = t.router({
           ticker: pos.ticker, tickerName: tickerInfo?.name ?? "", totalShares: pos.totalShares ?? 0, avgCostBasis: pos.avgCostBasis ?? 0,
           currentPrice, marketValue, unrealizedGL, unrealizedGLPercent, lots: pos.lots?.length ?? 0,
           positionId: pos.id, timingScore: pos.timingScore ?? 50, dcaSavingsPct: pos.dcaSavingsPct ?? 0,
+          signal: tickerInfo?.signal ?? "hold", maxDrawdown: pos.maxDrawdown ?? 0,
+          daysUnderwater: pos.daysUnderwater ?? 0, yearlyRangePct: pos.yearlyRangePct ?? 50,
+          entryVsMa50: pos.entryVsMa50 ?? 0,
         });
       }
       return {

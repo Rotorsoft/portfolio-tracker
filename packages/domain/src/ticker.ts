@@ -6,6 +6,7 @@
 import { eq, and, gte, lte, sql } from "drizzle-orm";
 import { db, tickers, prices } from "./drizzle/index.js";
 import type { PriceRecord } from "./schemas.js";
+import { sma, volatility30d, yearlyRange, computeSignal } from "./indicators.js";
 
 export type TickerView = {
   symbol: string;
@@ -15,6 +16,12 @@ export type TickerView = {
   firstPriceDate: string;
   lastPriceDate: string;
   lastClose: number;
+  ma50: number;
+  ma200: number;
+  volatility30d: number;
+  yearlyHigh: number;
+  yearlyLow: number;
+  signal: string;
 };
 
 export type PricePoint = PriceRecord;
@@ -163,6 +170,9 @@ export async function backfillPrices(
     .orderBy(prices.date)
     .limit(1);
 
+  // Fetch all prices for indicator computation
+  const allPrices = await db().select().from(prices).where(eq(prices.ticker, sym)).orderBy(prices.date);
+
   const updates: Record<string, unknown> = { priceCount: countResult[0]?.count ?? 0 };
   if (firstPrice.length > 0) updates.firstPriceDate = firstPrice[0].date;
   if (latestPrice.length > 0) {
@@ -171,6 +181,22 @@ export async function backfillPrices(
   }
   if (meta?.name) updates.name = meta.name;
   if (meta?.exchange) updates.exchange = meta.exchange;
+
+  // Technical indicators
+  if (allPrices.length > 0) {
+    const ma50Val = sma(allPrices, 50);
+    const ma200Val = sma(allPrices, 200);
+    const vol = volatility30d(allPrices);
+    const range = yearlyRange(allPrices);
+    const lastClose = latestPrice[0]?.close ?? 0;
+    updates.ma50 = Math.round(ma50Val * 100) / 100;
+    updates.ma200 = Math.round(ma200Val * 100) / 100;
+    updates.volatility30d = Math.round(vol * 100) / 100;
+    updates.yearlyHigh = range.high;
+    updates.yearlyLow = range.low;
+    updates.signal = computeSignal(lastClose, ma50Val, ma200Val);
+  }
+
   await db().update(tickers).set(updates).where(eq(tickers.symbol, sym));
 
   // Recalculate analytics for all positions holding this ticker
