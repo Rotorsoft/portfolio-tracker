@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1774704293102,
+      "tag": "0000_0000_init",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1774708688089,
+      "tag": "0001_0001_position_analytics",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1774712231439,
+      "tag": "0002_0002_ticker_first_price_date",
+      "breakpoints": true
+    }
+  ]
+}

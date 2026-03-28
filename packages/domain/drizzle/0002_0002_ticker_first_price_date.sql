@@ -1,0 +1,1 @@
+ALTER TABLE "tickers" ADD COLUMN "first_price_date" text DEFAULT '' NOT NULL;

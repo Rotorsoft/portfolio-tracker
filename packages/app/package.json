@@ -1,0 +1,42 @@
+{
+  "name": "@portfolio-tracker/app",
+  "type": "module",
+  "version": "0.0.1",
+  "scripts": {
+    "dev:api": "tsx watch src/dev-server.ts",
+    "dev:client": "vite --host",
+    "build": "vite build && tsc -p tsconfig.server.json",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@portfolio-tracker/domain": "workspace:*",
+    "@rotorsoft/act": "^0.25.1",
+    "@rotorsoft/act-pg": "^0.14.1",
+    "@rotorsoft/act-sse": "^1.2.1",
+    "@tanstack/react-query": "^5.90.21",
+    "@trpc/client": "11.10.0",
+    "@trpc/react-query": "11.10.0",
+    "@trpc/server": "11.10.0",
+    "cors": "^2.8.6",
+    "drizzle-orm": "^0.45.1",
+    "postgres": "^3.4.7",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router-dom": "^7.6.2",
+    "recharts": "^2.15.4",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.4",
+    "autoprefixer": "^10.4.21",
+    "drizzle-kit": "^0.31.10",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.11",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.1",
+    "@tailwindcss/vite": "^4.1.11"
+  }
+}

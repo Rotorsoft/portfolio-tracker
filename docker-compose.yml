@@ -1,0 +1,10 @@
+services:
+  pg_portfolio:
+    image: postgres:17-alpine
+    container_name: pg_portfolio
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5479:5432"

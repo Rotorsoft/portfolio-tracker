@@ -1,0 +1,21 @@
+{
+  "name": "@portfolio-tracker/domain",
+  "type": "module",
+  "version": "0.0.1",
+  "main": "./src/index.ts",
+  "scripts": {
+    "build": "echo 'domain: no build needed'",
+    "drizzle:generate": "drizzle-kit generate",
+    "drizzle:migrate": "drizzle-kit migrate"
+  },
+  "dependencies": {
+    "@rotorsoft/act": "^0.25.1",
+    "drizzle-orm": "^0.45.1",
+    "postgres": "^3.4.7",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@rotorsoft/act-pg": "^0.14.1",
+    "drizzle-kit": "^0.31.10"
+  }
+}

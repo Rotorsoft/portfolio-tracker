@@ -1,0 +1,9 @@
+node_modules
+dist
+coverage
+.env
+*.local
+/tmp
+events-backup.csv
+events-backup-fixed.csv
+fix-events.ts
