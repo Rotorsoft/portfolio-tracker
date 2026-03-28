@@ -29,6 +29,13 @@
       "when": 1774714275351,
       "tag": "0003_0003_technical_indicators",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1774750000000,
+      "tag": "0004_0004_ticker_fundamentals",
+      "breakpoints": true
     }
   ]
 }

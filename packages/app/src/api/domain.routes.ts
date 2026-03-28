@@ -12,11 +12,13 @@ import {
   getPriceDateRange,
   getMissingPriceDates,
   backfillPrices,
+  getTickerFundamentals,
+  upsertTickerFundamentals,
 } from "@portfolio-tracker/domain";
 import { z } from "zod";
 import { t, authedProcedure, publicProcedure } from "./trpc.js";
 import { doAction } from "./app.js";
-import { fetchPrices } from "./price-service.js";
+import { fetchPrices, fetchFundamentals } from "./price-service.js";
 
 export const domainRouter = t.router({
   // === Portfolio CRUD ===
@@ -126,6 +128,34 @@ export const domainRouter = t.router({
   getTicker: publicProcedure
     .input(z.object({ symbol: z.string() }))
     .query(async ({ input }) => getTicker(input.symbol)),
+  getBulkFundamentals: publicProcedure
+    .input(z.object({ symbols: z.array(z.string()) }))
+    .query(async ({ input }) => {
+      const results: Record<string, Awaited<ReturnType<typeof getTickerFundamentals>>> = {};
+      for (const sym of input.symbols) {
+        const cached = await getTickerFundamentals(sym.toUpperCase());
+        if (cached) results[sym.toUpperCase()] = cached;
+      }
+      return results;
+    }),
+  getFundamentals: publicProcedure
+    .input(z.object({ symbol: z.string() }))
+    .query(async ({ input }) => {
+      const symbol = input.symbol.toUpperCase();
+      const cached = await getTickerFundamentals(symbol);
+      if (cached) {
+        const age = Date.now() - new Date(cached.fetchedAt).getTime();
+        if (age < 60 * 60 * 1000) return cached;
+      }
+      try {
+        const fresh = await fetchFundamentals(symbol);
+        await upsertTickerFundamentals(symbol, fresh);
+        return { ...fresh, symbol, fetchedAt: new Date().toISOString() };
+      } catch (err) {
+        if (cached) return cached;
+        throw err;
+      }
+    }),
   getTickerPrices: publicProcedure
     .input(z.object({ symbol: z.string(), from: z.string().optional(), to: z.string().optional() }))
     .query(async ({ input }) => getTickerPrices(input.symbol, input.from, input.to)),

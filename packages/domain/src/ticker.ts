@@ -4,7 +4,7 @@
  * Prices are written directly by the backfill service.
  */
 import { eq, and, gte, lte, sql } from "drizzle-orm";
-import { db, tickers, prices } from "./drizzle/index.js";
+import { db, tickers, tickerFundamentals, prices } from "./drizzle/index.js";
 import type { PriceRecord } from "./schemas.js";
 import { sma, volatility30d, yearlyRange, computeSignal } from "./indicators.js";
 
@@ -111,6 +111,39 @@ export async function getMissingPriceDates(
     firstDate: rangeResult[0]?.firstDate ?? "",
     lastDate: rangeResult[0]?.lastDate ?? "",
   };
+}
+
+// === Fundamentals cache ===
+export type FundamentalsView = {
+  symbol: string;
+  trailingPE: number | null;
+  forwardPE: number | null;
+  epsTrailing: number | null;
+  epsForward: number | null;
+  dividendYield: number | null;
+  marketCap: number | null;
+  bookValue: number | null;
+  priceToBook: number | null;
+  fiftyTwoWeekHigh: number | null;
+  fiftyTwoWeekLow: number | null;
+  sector: string | null;
+  industry: string | null;
+  fetchedAt: string;
+};
+
+export async function getTickerFundamentals(symbol: string): Promise<FundamentalsView | undefined> {
+  const rows = await db().select().from(tickerFundamentals).where(eq(tickerFundamentals.symbol, symbol.toUpperCase()));
+  return rows[0] as FundamentalsView | undefined;
+}
+
+export async function upsertTickerFundamentals(symbol: string, data: Omit<FundamentalsView, "symbol" | "fetchedAt">) {
+  await db()
+    .insert(tickerFundamentals)
+    .values({ symbol: symbol.toUpperCase(), ...data, fetchedAt: new Date().toISOString() })
+    .onConflictDoUpdate({
+      target: tickerFundamentals.symbol,
+      set: { ...data, fetchedAt: new Date().toISOString() },
+    });
 }
 
 // === Backfill (direct DB write) ===

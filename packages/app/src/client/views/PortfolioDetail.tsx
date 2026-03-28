@@ -19,6 +19,11 @@ type Props = {
 export function PortfolioDetail({ portfolioId, onBack }: Props) {
   const { data: portfolio } = trpc.getPortfolio.useQuery({ id: portfolioId });
   const { data: summary } = trpc.getPortfolioSummary.useQuery({ portfolioId });
+  const tickers_list = summary?.positions?.map((p) => p.ticker) ?? [];
+  const { data: bulkFundamentals } = trpc.getBulkFundamentals.useQuery(
+    { symbols: tickers_list },
+    { enabled: tickers_list.length > 0, staleTime: 5 * 60 * 1000 },
+  );
   const { data: positions } = trpc.getPositionsByPortfolio.useQuery({ portfolioId });
   const openMutation = trpc.openPosition.useMutation();
   const addLotMutation = trpc.addLot.useMutation();
@@ -38,9 +43,13 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
     else { setSortCol(col); setSortDir(col === "ticker" ? "asc" : "desc"); }
   };
 
+  const getSortVal = (pos: any, col: string) => {
+    if (col === "pe") return bulkFundamentals?.[pos.ticker]?.trailingPE ?? 0;
+    return pos[col] ?? 0;
+  };
   const sortedPositions = [...(summary?.positions ?? [])].sort((a, b) => {
-    const av = (a as any)[sortCol] ?? 0;
-    const bv = (b as any)[sortCol] ?? 0;
+    const av = getSortVal(a, sortCol);
+    const bv = getSortVal(b, sortCol);
     const cmp = typeof av === "string" ? av.localeCompare(bv) : av - bv;
     return sortDir === "asc" ? cmp : -cmp;
   });
@@ -170,7 +179,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
 
   const glColor = (val: number) => val >= 0 ? "text-emerald-400" : "text-red-400";
   const fmt = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
-  const fmtPct = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
+  const fmtPct = (n: number) => `${Math.abs(n).toFixed(2)}%`;
 
   const subTabs: { id: SubTab; label: string; icon: React.ReactNode }[] = [
     { id: "positions", label: "Positions", icon: <LayoutList size={14} /> },
@@ -184,46 +193,22 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
         <ArrowLeft size={14} /> Back to portfolios
       </button>
 
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <h2 className="text-xl font-semibold text-white">{portfolio?.name}</h2>
-          <p className="text-sm text-gray-500 mt-1">
-            {portfolio?.description && <>{portfolio.description} &middot; </>}
-            {portfolio?.currency}
-            {cutoffDate && <> &middot; Since {fmtDate(cutoffDate)}</>}
-          </p>
-        </div>
-        <Tooltip label="Portfolio settings">
-          <button onClick={() => setShowSettings(true)} className="text-gray-500 hover:text-gray-300 transition-colors">
-            <Settings size={20} />
-          </button>
-        </Tooltip>
-      </div>
-
-      {/* Summary Cards */}
-      {summary && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <div className="text-xs text-gray-500 uppercase tracking-wider">Total Cost</div>
-            <div className="text-lg font-semibold text-white mt-1">{fmt(summary.totalCost)}</div>
-          </div>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <div className="text-xs text-gray-500 uppercase tracking-wider">Market Value</div>
-            <div className="text-lg font-semibold text-white mt-1">{fmt(summary.totalMarketValue)}</div>
-          </div>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <div className="text-xs text-gray-500 uppercase tracking-wider">Unrealized G/L</div>
-            <div className={`text-lg font-semibold mt-1 ${glColor(summary.totalUnrealizedGL)}`}>{fmt(summary.totalUnrealizedGL)}</div>
-          </div>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <div className="text-xs text-gray-500 uppercase tracking-wider">Return</div>
-            <div className={`text-lg font-semibold mt-1 ${glColor(summary.totalUnrealizedGLPercent)}`}>{fmtPct(summary.totalUnrealizedGLPercent)}</div>
-          </div>
-        </div>
-      )}
-
-      {/* Sub-tabs */}
       <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-4">
+          <div>
+            <h2 className="text-xl font-semibold text-white">{portfolio?.name}</h2>
+            <p className="text-xs text-gray-500">
+              {portfolio?.description && <>{portfolio.description} &middot; </>}
+              {portfolio?.currency}
+              {cutoffDate && <> &middot; Since {fmtDate(cutoffDate)}</>}
+            </p>
+          </div>
+          <Tooltip label="Portfolio settings">
+            <button onClick={() => setShowSettings(true)} className="text-gray-500 hover:text-gray-300 transition-colors">
+              <Settings size={16} />
+            </button>
+          </Tooltip>
+        </div>
         <nav className="flex gap-1">
           {subTabs.map((t) => (
             <button key={t.id} onClick={() => setSubTab(t.id)}
@@ -234,18 +219,43 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
             </button>
           ))}
         </nav>
+        {summary && (
+          <div className="flex items-center gap-6 text-right">
+            <div>
+              <div className="text-[10px] text-gray-600 uppercase">Cost</div>
+              <div className="text-sm font-semibold text-white">{fmt(summary.totalCost)}</div>
+            </div>
+            <div>
+              <div className="text-[10px] text-gray-600 uppercase">Value</div>
+              <div className="text-sm font-semibold text-white">{fmt(summary.totalMarketValue)}</div>
+            </div>
+            <div>
+              <div className="text-[10px] text-gray-600 uppercase">G/L</div>
+              <div className={`text-sm font-semibold ${glColor(summary.totalUnrealizedGL)}`}>{fmt(summary.totalUnrealizedGL)}</div>
+            </div>
+            <div>
+              <div className="text-[10px] text-gray-600 uppercase">Return</div>
+              <div className={`text-sm font-semibold ${glColor(summary.totalUnrealizedGLPercent)}`}>{fmtPct(summary.totalUnrealizedGLPercent)}</div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Tab actions */}
+      <div className="flex items-center justify-between mb-4">
+        <div />
         {subTab === "positions" && !showAdd && (
           <div className="flex gap-2">
-            <button onClick={() => setShowAdd("lots")} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-1"><Plus size={14} /> Add Lots</button>
-            <button onClick={() => setShowAdd("positions")} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-1"><Plus size={14} /> Add Tickers</button>
+            <button onClick={() => setShowAdd("lots")} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><Plus size={12} /> Add Lots</button>
+            <button onClick={() => setShowAdd("positions")} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><Plus size={12} /> Add Tickers</button>
           </div>
         )}
         {subTab === "prices" && (
           allFilled ? (
             <span className="text-emerald-400 text-sm">&#10003; All filled</span>
           ) : (
-            <button onClick={handleBackfillAll} disabled={anyLoading} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 flex items-center gap-1">
-              {backfillingAll ? "Backfilling..." : <><RefreshCw size={14} /> Backfill All</>}
+            <button onClick={handleBackfillAll} disabled={anyLoading} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">
+              {backfillingAll ? "Backfilling..." : <><RefreshCw size={12} /> Backfill All</>}
             </button>
           )
         )}
@@ -259,8 +269,8 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
               <input type="text" placeholder="Ticker symbols (e.g. AAPL, MSFT, GOOG)" value={tickers} onChange={(e) => setTickers(e.target.value)} autoFocus
                 className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" required />
               <div className="flex gap-2">
-                <button type="submit" disabled={adding} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 flex items-center gap-1">{adding ? "Adding..." : <><Plus size={14} /> Open</>}</button>
-                <button type="button" onClick={() => setShowAdd(false)} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-1"><X size={14} /> Cancel</button>
+                <button type="submit" disabled={adding} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">{adding ? "Adding..." : <><Plus size={12} /> Open</>}</button>
+                <button type="button" onClick={() => setShowAdd(false)} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><X size={12} /> Cancel</button>
               </div>
             </form>
           )}
@@ -299,8 +309,8 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
               <div className="flex items-center gap-3">
                 <button type="button" onClick={() => setLotRows((r) => [...r, emptyRow()])} className="text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1"><Plus size={12} /> Add row</button>
                 <div className="flex-1" />
-                <button type="submit" disabled={adding} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 flex items-center gap-1">{adding ? "Adding..." : <><Plus size={14} /> Submit Lots</>}</button>
-                <button type="button" onClick={() => setShowAdd(false)} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-1"><X size={14} /> Cancel</button>
+                <button type="submit" disabled={adding} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">{adding ? "Adding..." : <><Plus size={12} /> Submit Lots</>}</button>
+                <button type="button" onClick={() => setShowAdd(false)} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><X size={12} /> Cancel</button>
               </div>
             </form>
           )}
@@ -318,14 +328,15 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                     { key: "unrealizedGL", label: "G/L", align: "right" },
                     { key: "unrealizedGLPercent", label: "G/L %", align: "right" },
                     { key: "lots", label: "Lots", align: "right" },
+                    { key: "pe", label: "P/E", align: "right" },
                   ].map((col) => (
                     <th key={col.key} onClick={() => toggleSort(col.key)}
-                      className={`text-${col.align} px-4 py-3 text-xs text-gray-500 uppercase cursor-pointer hover:text-gray-300 select-none whitespace-nowrap`}>
+                      className={`text-${col.align} px-3 py-2 text-xs text-gray-500 uppercase cursor-pointer hover:text-gray-300 select-none whitespace-nowrap`}>
                       {col.label}{sortCol === col.key ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
                     </th>
                   ))}
                   <th onClick={() => toggleSort("timingScore")}
-                    className="text-center px-4 py-3 text-xs text-gray-500 uppercase cursor-pointer hover:text-gray-300 select-none whitespace-nowrap">
+                    className="text-center px-3 py-2 text-xs text-gray-500 uppercase cursor-pointer hover:text-gray-300 select-none whitespace-nowrap">
                     Timing{sortCol === "timingScore" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
                     <InfoTip>
                       <div className="space-y-1.5">
@@ -343,7 +354,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                     </InfoTip>
                   </th>
                   <th onClick={() => toggleSort("dcaSavingsPct")}
-                    className="text-right px-4 py-3 text-xs text-gray-500 uppercase cursor-pointer hover:text-gray-300 select-none whitespace-nowrap">
+                    className="text-right px-3 py-2 text-xs text-gray-500 uppercase cursor-pointer hover:text-gray-300 select-none whitespace-nowrap">
                     vs DCA{sortCol === "dcaSavingsPct" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
                     <InfoTip>
                       <div className="space-y-1.5">
@@ -360,7 +371,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                     </InfoTip>
                   </th>
                   <th onClick={() => toggleSort("signal")}
-                    className="text-center px-4 py-3 text-xs text-gray-500 uppercase cursor-pointer hover:text-gray-300 select-none whitespace-nowrap">
+                    className="text-center px-3 py-2 text-xs text-gray-500 uppercase cursor-pointer hover:text-gray-300 select-none whitespace-nowrap">
                     Signal{sortCol === "signal" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
                     <InfoTip>
                       <div className="space-y-2">
@@ -401,18 +412,19 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                 {sortedPositions.map((pos) => (
                   <tr key={pos.ticker} onClick={() => nav.toPosition(portfolioId, pos.ticker)}
                     className="border-b border-gray-800/50 hover:bg-gray-800/30 cursor-pointer transition-colors">
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-2">
                       <span className="font-medium text-white">{pos.ticker}</span>
                       {pos.tickerName && <div className="text-[10px] text-gray-600 truncate max-w-[200px]">{pos.tickerName}</div>}
                     </td>
-                    <td className="px-4 py-3 text-right text-gray-300">{pos.totalShares.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-right text-gray-300">{fmt(pos.avgCostBasis)}</td>
-                    <td className="px-4 py-3 text-right text-gray-300">{fmt(pos.currentPrice)}</td>
-                    <td className="px-4 py-3 text-right text-gray-300">{fmt(pos.marketValue)}</td>
-                    <td className={`px-4 py-3 text-right font-medium ${glColor(pos.unrealizedGL)}`}>{fmt(pos.unrealizedGL)}</td>
-                    <td className={`px-4 py-3 text-right font-medium ${glColor(pos.unrealizedGLPercent)}`}>{fmtPct(pos.unrealizedGLPercent)}</td>
-                    <td className="px-4 py-3 text-right text-gray-500">{pos.lots}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-2 text-right text-gray-300">{pos.totalShares.toLocaleString()}</td>
+                    <td className="px-3 py-2 text-right text-gray-300">{fmt(pos.avgCostBasis)}</td>
+                    <td className="px-3 py-2 text-right text-gray-300">{fmt(pos.currentPrice)}</td>
+                    <td className="px-3 py-2 text-right text-gray-300">{fmt(pos.marketValue)}</td>
+                    <td className={`px-3 py-2 text-right font-medium ${glColor(pos.unrealizedGL)}`}>{fmt(pos.unrealizedGL)}</td>
+                    <td className={`px-3 py-2 text-right font-medium ${glColor(pos.unrealizedGLPercent)}`}>{fmtPct(pos.unrealizedGLPercent)}</td>
+                    <td className="px-3 py-2 text-right text-gray-500">{pos.lots}</td>
+                    <td className="px-3 py-2 text-right text-gray-300 text-xs">{bulkFundamentals?.[pos.ticker]?.trailingPE?.toFixed(1) ?? "—"}</td>
+                    <td className="px-3 py-2">
                       <div className="flex items-center justify-center gap-1">
                         <div className="w-12 h-1.5 bg-gray-700 rounded-full overflow-hidden">
                           <div className={`h-full rounded-full ${
@@ -422,10 +434,10 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                         <span className="text-xs text-gray-500">{pos.timingScore.toFixed(0)}%</span>
                       </div>
                     </td>
-                    <td className={`px-4 py-3 text-right text-xs font-medium ${pos.dcaSavingsPct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                      {pos.dcaSavingsPct >= 0 ? "+" : ""}{pos.dcaSavingsPct.toFixed(1)}%
+                    <td className={`px-3 py-2 text-right text-xs font-medium ${pos.dcaSavingsPct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                      {Math.abs(pos.dcaSavingsPct).toFixed(1)}%
                     </td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="px-3 py-2 text-center">
                       <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
                         pos.signal === "strong buy" ? "bg-emerald-500/20 text-emerald-400" :
                         pos.signal === "buy" ? "bg-emerald-500/10 text-emerald-400" :
@@ -447,10 +459,9 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
 
       {/* === Analysis Tab === */}
       {subTab === "analysis" && (
-        <div className="space-y-6">
-          <WhatIfChart portfolioId={portfolioId} cutoffDate={cutoffDate} onSelectTicker={(ticker) => nav.toPosition(portfolioId, ticker)} />
-        </div>
+        <WhatIfChart portfolioId={portfolioId} cutoffDate={cutoffDate} onSelectTicker={(ticker) => nav.toPosition(portfolioId, ticker)} />
       )}
+
 
       {/* === Price Data Tab === */}
       {subTab === "prices" && (
@@ -512,11 +523,11 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-800">
-                <th className="text-left px-4 py-3 text-xs text-gray-500 uppercase">Symbol</th>
-                <th className="text-right px-4 py-3 text-xs text-gray-500 uppercase">Last Price</th>
-                <th className="text-right px-4 py-3 text-xs text-gray-500 uppercase">Last Date</th>
-                <th className="text-center px-4 py-3 text-xs text-gray-500 uppercase">Prices</th>
-                <th className="text-center px-2 py-3 text-xs text-gray-500 uppercase">Action</th>
+                <th className="text-left px-3 py-2 text-xs text-gray-500 uppercase">Symbol</th>
+                <th className="text-right px-3 py-2 text-xs text-gray-500 uppercase">Last Price</th>
+                <th className="text-right px-3 py-2 text-xs text-gray-500 uppercase">Last Date</th>
+                <th className="text-center px-3 py-2 text-xs text-gray-500 uppercase">Prices</th>
+                <th className="text-center px-3 py-2 text-xs text-gray-500 uppercase">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -540,15 +551,15 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                 const barColor = pct === 0 ? "bg-red-500" : filled ? "bg-emerald-500" : "bg-amber-500";
                 return (
                   <tr key={pos.ticker} className="border-b border-gray-800/50">
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-2">
                       <span className="font-medium text-white">{pos.ticker}</span>
                       {ticker?.name && <span className="text-xs text-gray-500 ml-2">{ticker.name}</span>}
                     </td>
-                    <td className="px-4 py-3 text-right text-gray-300">
+                    <td className="px-3 py-2 text-right text-gray-300">
                       {ticker?.lastClose ? `$${ticker.lastClose.toFixed(2)}` : "-"}
                     </td>
-                    <td className="px-4 py-3 text-right text-gray-500">{ticker?.lastPriceDate ? fmtDate(ticker.lastPriceDate) : "-"}</td>
-                      <td className="px-4 py-3">
+                    <td className="px-3 py-2 text-right text-gray-500">{ticker?.lastPriceDate ? fmtDate(ticker.lastPriceDate) : "-"}</td>
+                      <td className="px-3 py-2">
                         <div className="flex items-center justify-center gap-2">
                           <div className="h-2 w-14 bg-gray-700 rounded-full overflow-hidden">
                             <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }} />

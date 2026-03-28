@@ -30,6 +30,9 @@ export {
   backfillPrices,
   type TickerView,
   type PricePoint,
+  getTickerFundamentals,
+  upsertTickerFundamentals,
+  type FundamentalsView,
 } from "./ticker.js";
 export {
   type AppActor,

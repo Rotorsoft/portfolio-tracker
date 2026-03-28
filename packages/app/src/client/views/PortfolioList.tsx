@@ -34,7 +34,7 @@ export function PortfolioList({ onSelect }: { onSelect: (id: string) => void }) 
         <h2 className="text-xl font-semibold text-white">Portfolios</h2>
         <button
           onClick={() => setShowCreate(!showCreate)}
-          className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1"
+          className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium transition-colors flex items-center gap-1"
         >
           {showCreate ? <><X size={14} /> Cancel</> : <><Plus size={14} /> New Portfolio</>}
         </button>
@@ -63,7 +63,7 @@ export function PortfolioList({ onSelect }: { onSelect: (id: string) => void }) 
             <input type="date" value={cutoffDate} onChange={(e) => setCutoffDate(e.target.value)}
               className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white" />
           </div>
-          <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-1">
+          <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1">
             <Plus size={14} /> Create
           </button>
         </form>

@@ -8,77 +8,14 @@ import { fmtDate } from "../fmt.js";
 
 type Props = { positionId: string; portfolioId: string; ticker: string; cutoffDate?: string; onBack: () => void };
 
-type TickerInfo = { lastClose: number; ma50: number; ma200: number; volatility30d: number; yearlyHigh: number; yearlyLow: number; signal: string };
 
-function TodaySignal({ tickerInfo }: { tickerInfo: TickerInfo }) {
-  const price = tickerInfo.lastClose ?? 0;
-  const vsMa50 = tickerInfo.ma50 > 0 ? ((price - tickerInfo.ma50) / tickerInfo.ma50 * 100) : 0;
-  const vsMa200 = tickerInfo.ma200 > 0 ? ((price - tickerInfo.ma200) / tickerInfo.ma200 * 100) : 0;
-  const goldenCross = tickerInfo.ma50 > tickerInfo.ma200 && tickerInfo.ma200 > 0;
-  const deathCross = tickerInfo.ma50 < tickerInfo.ma200 && tickerInfo.ma200 > 0;
-  const signalColor =
-    tickerInfo.signal === "strong buy" ? "bg-emerald-500/20 text-emerald-400" :
-    tickerInfo.signal === "buy" ? "bg-emerald-500/10 text-emerald-400" :
-    tickerInfo.signal === "strong sell" ? "bg-red-500/20 text-red-400" :
-    tickerInfo.signal === "sell" ? "bg-red-500/10 text-red-400" :
-    "bg-gray-700 text-gray-400";
-  const recommendation =
-    tickerInfo.signal === "strong buy" ? `Dip buy opportunity — price ${Math.abs(vsMa50).toFixed(1)}% below MA50 in a confirmed uptrend` :
-    tickerInfo.signal === "buy" ? `Uptrend intact — golden cross with price ${vsMa50 >= 0 ? "+" : ""}${vsMa50.toFixed(1)}% vs MA50` :
-    tickerInfo.signal === "strong sell" ? `Bear rally — price ${vsMa50.toFixed(1)}% above MA50 in a confirmed downtrend` :
-    tickerInfo.signal === "sell" ? `Downtrend — death cross with price ${vsMa50.toFixed(1)}% vs MA50` :
-    "Moving averages converging — no clear trend, wait for confirmation";
-  return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4">
-      <div className="flex items-center gap-3 mb-3">
-        <h3 className="text-sm font-medium text-gray-400">Today's Signal</h3>
-        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${signalColor}`}>{tickerInfo.signal?.toUpperCase()}</span>
-      </div>
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
-        <div>
-          <div className="text-gray-600">Price vs MA50</div>
-          <div className={`font-medium ${vsMa50 >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-            {vsMa50 >= 0 ? "+" : ""}{vsMa50.toFixed(1)}%
-          </div>
-          <div className="text-gray-600">${tickerInfo.ma50.toFixed(2)}</div>
-        </div>
-        <div>
-          <div className="text-gray-600">Price vs MA200</div>
-          <div className={`font-medium ${vsMa200 >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-            {tickerInfo.ma200 > 0 ? `${vsMa200 >= 0 ? "+" : ""}${vsMa200.toFixed(1)}%` : "N/A"}
-          </div>
-          <div className="text-gray-600">{tickerInfo.ma200 > 0 ? `$${tickerInfo.ma200.toFixed(2)}` : ""}</div>
-        </div>
-        <div>
-          <div className="text-gray-600">MA Crossover</div>
-          <div className={`font-medium ${goldenCross ? "text-emerald-400" : deathCross ? "text-red-400" : "text-gray-400"}`}>
-            {goldenCross ? "Golden Cross ↑" : deathCross ? "Death Cross ↓" : "Converging"}
-          </div>
-          <div className="text-gray-600">Volatility {tickerInfo.volatility30d.toFixed(1)}%</div>
-        </div>
-        <div>
-          <div className="text-gray-600">52wk Range</div>
-          <div className="font-medium text-gray-300">${tickerInfo.yearlyLow.toFixed(2)} — ${tickerInfo.yearlyHigh.toFixed(2)}</div>
-        </div>
-        <div>
-          <div className="text-gray-600">Recommendation</div>
-          <div className={`font-medium ${
-            tickerInfo.signal?.includes("buy") ? "text-emerald-400" :
-            tickerInfo.signal?.includes("sell") ? "text-red-400" : "text-gray-400"
-          }`}>
-            {recommendation}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, onBack }: Props) {
   const { data: position } = trpc.getPosition.useQuery({ positionId });
   const { data: tickerInfo } = trpc.getTicker.useQuery({ symbol: ticker });
   const { data: entry } = trpc.getEntryAnalysis.useQuery({ positionId });
   const { data: overlays } = trpc.getChartOverlays.useQuery({ symbol: ticker });
+  const { data: fundamentals } = trpc.getFundamentals.useQuery({ symbol: ticker }, { staleTime: 5 * 60 * 1000 });
   const addMutation = trpc.addLot.useMutation();
   const removeMutation = trpc.removeLot.useMutation();
   const utils = trpc.useUtils();
@@ -220,21 +157,6 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
         <ArrowLeft size={14} /> Back to portfolio
       </button>
 
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <h2 className="text-xl font-semibold text-white">
-            {position.ticker}
-            {tickerInfo?.name && <span className="text-sm font-normal text-gray-400 ml-2">{tickerInfo.name}</span>}
-          </h2>
-        </div>
-        <button
-          onClick={() => setShowAdd(!showAdd)}
-          className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1"
-        >
-          {showAdd ? <><X size={14} /> Cancel</> : <><Plus size={14} /> Add Lot</>}
-        </button>
-      </div>
-
       {(() => {
         const shares = position.totalShares ?? 0;
         const cost = position.totalCost ?? 0;
@@ -243,79 +165,104 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
         const marketValue = shares * currentPrice;
         const unrealizedGL = marketValue - cost;
         const glPct = cost > 0 ? (unrealizedGL / cost) * 100 : 0;
+        const fmtCap = (n: number) => n >= 1e12 ? `$${(n / 1e12).toFixed(1)}T` : n >= 1e9 ? `$${(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `$${(n / 1e6).toFixed(0)}M` : `$${n.toLocaleString()}`;
+        const a = entry?.analysis;
+        const f = fundamentals;
+        const ti = tickerInfo;
+        const vsMa50 = ti && ti.ma50 > 0 ? ((currentPrice - ti.ma50) / ti.ma50 * 100) : 0;
+        const vsMa200 = ti && ti.ma200 > 0 ? ((currentPrice - ti.ma200) / ti.ma200 * 100) : 0;
+        const goldenCross = ti ? ti.ma50 > ti.ma200 && ti.ma200 > 0 : false;
+        const deathCross = ti ? ti.ma50 < ti.ma200 && ti.ma200 > 0 : false;
+        const signalColor =
+          ti?.signal === "strong buy" ? "bg-emerald-500/20 text-emerald-400" :
+          ti?.signal === "buy" ? "bg-emerald-500/10 text-emerald-400" :
+          ti?.signal === "strong sell" ? "bg-red-500/20 text-red-400" :
+          ti?.signal === "sell" ? "bg-red-500/10 text-red-400" :
+          "bg-gray-700 text-gray-400";
+        const recommendation =
+          ti?.signal === "strong buy" ? `Dip buy — price ${Math.abs(vsMa50).toFixed(1)}% below MA50 in uptrend` :
+          ti?.signal === "buy" ? `Uptrend — golden cross, ${Math.abs(vsMa50).toFixed(1)}% vs MA50` :
+          ti?.signal === "strong sell" ? `Bear rally — ${Math.abs(vsMa50).toFixed(1)}% above MA50 in downtrend` :
+          ti?.signal === "sell" ? `Downtrend — death cross, ${Math.abs(vsMa50).toFixed(1)}% vs MA50` :
+          "MAs converging — no clear trend";
+
+        const hasFundamentals = f && (f.trailingPE != null || f.epsTrailing != null || f.dividendYield != null || f.marketCap != null || f.sector);
+
         return (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
-              <div className="text-xs text-gray-500 uppercase">Shares</div>
-              <div className="text-lg font-semibold text-white mt-1">{shares.toLocaleString()}</div>
-              <div className="text-xs text-gray-500">Avg {fmt(avgCost)}</div>
-            </div>
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
-              <div className="text-xs text-gray-500 uppercase">Total Cost</div>
-              <div className="text-lg font-semibold text-white mt-1">{fmt(cost)}</div>
-            </div>
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
-              <div className="text-xs text-gray-500 uppercase">Market Value</div>
-              <div className="text-lg font-semibold text-white mt-1">{currentPrice > 0 ? fmt(marketValue) : "-"}</div>
-              <div className="text-xs text-gray-500">{currentPrice > 0 ? `@ ${fmt(currentPrice)}` : ""}</div>
-            </div>
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
-              <div className="text-xs text-gray-500 uppercase">Unrealized G/L</div>
-              <div className={`text-lg font-semibold mt-1 ${glColor(unrealizedGL)}`}>
-                {currentPrice > 0 ? fmt(unrealizedGL) : "-"}
+          <div className="mb-3">
+            {/* Title row with signal + recommendation */}
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-3">
+                <h2 className="text-lg font-semibold text-white">
+                  {position.ticker}
+                  {ti?.name && <span className="text-sm font-normal text-gray-400 ml-2">{ti.name}</span>}
+                </h2>
+                {ti && <>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${signalColor}`}>{ti.signal?.toUpperCase()}</span>
+                  <span className={`text-xs ${ti.signal?.includes("buy") ? "text-emerald-400" : ti.signal?.includes("sell") ? "text-red-400" : "text-gray-500"}`}>{recommendation}</span>
+                </>}
               </div>
-              {currentPrice > 0 && (
-                <div className={`text-xs ${glColor(glPct)}`}>{glPct >= 0 ? "+" : ""}{glPct.toFixed(1)}%</div>
-              )}
+              <button
+                onClick={() => setShowAdd(!showAdd)}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium transition-colors flex items-center gap-1"
+              >
+                {showAdd ? <><X size={12} /> Cancel</> : <><Plus size={12} /> Add Lot</>}
+              </button>
+            </div>
+            {/* Stats groups */}
+            <div className="bg-gray-900 border border-gray-800 rounded-lg px-4 py-3">
+              <div className="flex justify-between">
+                {/* Position */}
+                <div className="pr-5 border-r border-gray-800 flex-1">
+                  <div className="text-[10px] text-gray-500 font-medium uppercase tracking-wider mb-1.5">Position</div>
+                  <div className="flex justify-between">
+                    <div className="text-center"><div className="text-[11px] text-gray-500">Shares</div><div className="text-sm font-semibold text-white">{shares.toLocaleString()}</div><div className="text-[11px] text-gray-600">Avg {fmt(avgCost)}</div></div>
+                    <div className="text-center"><div className="text-[11px] text-gray-500">Cost</div><div className="text-sm font-semibold text-white">{fmt(cost)}</div></div>
+                    <div className="text-center"><div className="text-[11px] text-gray-500">Value</div><div className="text-sm font-semibold text-white">{currentPrice > 0 ? fmt(marketValue) : "—"}</div>{currentPrice > 0 && <div className="text-[11px] text-gray-600">@ {fmt(currentPrice)}</div>}</div>
+                    <div className="text-center"><div className="text-[11px] text-gray-500">G/L</div><div className={`text-sm font-semibold ${glColor(unrealizedGL)}`}>{currentPrice > 0 ? fmt(unrealizedGL) : "—"}</div>{currentPrice > 0 && <div className={`text-[11px] ${glColor(glPct)}`}>{Math.abs(glPct).toFixed(1)}%</div>}</div>
+                  </div>
+                </div>
+                {/* Market Data (technicals + fundamentals) */}
+                {ti && (
+                  <div className="px-5 border-r border-gray-800 shrink-0">
+                    <div className="text-[10px] text-gray-500 font-medium uppercase tracking-wider mb-1.5">Market</div>
+                    <div className="flex gap-4">
+                      <div className="text-center"><div className="text-[11px] text-gray-500">Price</div><div className="text-sm font-semibold text-white">{fmt(currentPrice)}</div></div>
+                      <div className="text-center"><div className="text-[11px] text-gray-500">52wk</div><div className="text-sm text-white whitespace-nowrap">${ti.yearlyLow.toFixed(2)} – ${ti.yearlyHigh.toFixed(2)}</div><div className="text-[11px] text-gray-600">Vol {ti.volatility30d.toFixed(1)}%</div></div>
+                      {hasFundamentals && <>
+                        {f.trailingPE != null && <div className="text-center"><div className="text-[11px] text-gray-500">P/E</div><div className="text-sm text-white">{f.trailingPE.toFixed(1)}</div>{f.forwardPE != null && <div className="text-[11px] text-gray-600">Fwd {f.forwardPE.toFixed(1)}</div>}</div>}
+                        {f.epsTrailing != null && <div className="text-center"><div className="text-[11px] text-gray-500">EPS</div><div className="text-sm text-white">${f.epsTrailing.toFixed(2)}</div>{f.epsForward != null && <div className="text-[11px] text-gray-600">Fwd ${f.epsForward.toFixed(2)}</div>}</div>}
+                        {f.dividendYield != null && <div className="text-center"><div className="text-[11px] text-gray-500">Yield</div><div className="text-sm text-white">{(f.dividendYield * 100).toFixed(2)}%</div></div>}
+                        {f.marketCap != null && <div className="text-center"><div className="text-[11px] text-gray-500">Mkt Cap</div><div className="text-sm text-white">{fmtCap(f.marketCap)}</div></div>}
+                        {f.sector && <div className="text-center"><div className="text-[11px] text-gray-500">Sector</div><div className="text-sm text-gray-300">{f.sector}</div>{f.industry && <div className="text-[11px] text-gray-600">{f.industry}</div>}</div>}
+                      </>}
+                    </div>
+                  </div>
+                )}
+                {/* Timing */}
+                {a && ti && (() => {
+                  const grade = computeGrade(avgCost, ti.ma50, ti.ma200);
+                  const gradeBg = grade === "A" ? "bg-emerald-500/10 border-emerald-500/20" : grade === "B" ? "bg-emerald-500/5 border-emerald-500/10" : grade === "C" ? "bg-amber-500/5 border-amber-500/10" : "bg-red-500/5 border-red-500/10";
+                  const gradeText = grade === "A" || grade === "B" ? "text-emerald-400" : grade === "C" ? "text-amber-400" : "text-red-400";
+                  return (
+                  <div className={`pl-5 flex-1 -my-3 -mr-4 py-3 pr-4 rounded-r-lg border-l ${gradeBg}`}>
+                    <div className="text-[10px] text-gray-500 font-medium uppercase tracking-wider mb-1.5">Grade <Tooltip label={`${grade}: ${grade === "A" ? "Dip buy in uptrend — entry below MA50 during golden cross" : grade === "B" ? "Buying in uptrend — golden cross confirmed" : grade === "C" ? "No clear trend — MAs converging" : grade === "D" ? "Buying in downtrend — death cross confirmed" : "Chasing in downtrend — entry above MA50 during death cross"}`} icon><span className={`text-sm font-bold ${gradeText}`}>{grade}</span></Tooltip></div>
+                    <div className="flex justify-between">
+                      <div className="text-center"><Tooltip label="Price vs 50/200-day MAs" icon><span className="text-[11px] text-gray-500">MAs</span></Tooltip><div className="text-sm"><span className={`font-medium ${vsMa50 >= 0 ? "text-emerald-400" : "text-red-400"}`}>{Math.abs(vsMa50).toFixed(1)}%</span><span className="text-gray-600"> / </span><span className={`font-medium ${vsMa200 >= 0 ? "text-emerald-400" : "text-red-400"}`}>{ti.ma200 > 0 ? `${Math.abs(vsMa200).toFixed(1)}%` : "—"}</span></div></div>
+                      <div className="text-center"><Tooltip label="Golden Cross = uptrend, Death Cross = downtrend" icon><span className="text-[11px] text-gray-500">Cross</span></Tooltip><div className={`text-sm font-medium ${goldenCross ? "text-emerald-400" : deathCross ? "text-red-400" : "text-gray-400"}`}>{goldenCross ? "Golden ↑" : deathCross ? "Death ↓" : "—"}</div></div>
+                      <div className="text-center"><Tooltip label="100% = bought at low, 0% = at high" icon><span className="text-[11px] text-gray-500">Score</span></Tooltip><div className={`text-sm font-semibold ${a.timingScore >= 66 ? "text-emerald-400" : a.timingScore >= 33 ? "text-amber-400" : "text-red-400"}`}>{a.timingScore.toFixed(0)}%</div></div>
+                      <div className="text-center"><Tooltip label="Your entry vs dollar-cost averaging" icon><span className="text-[11px] text-gray-500">DCA</span></Tooltip><div className={`text-sm font-semibold ${glColor(a.dcaSavingsPct)}`}>{Math.abs(a.dcaSavingsPct).toFixed(1)}%</div></div>
+                      <div className="text-center"><Tooltip label="Max drawdown / days underwater" icon><span className="text-[11px] text-gray-500">DD</span></Tooltip><div className="text-sm"><span className="font-semibold text-red-400">{position.maxDrawdown > 0 ? `${position.maxDrawdown.toFixed(1)}%` : "—"}</span><span className="text-gray-600"> {position.daysUnderwater}d</span></div></div>
+                      <div className="text-center"><Tooltip label="Entry price vs MA50 at time of purchase" icon><span className="text-[11px] text-gray-500">Entry</span></Tooltip><div className={`text-sm font-medium ${position.entryVsMa50 <= 0 ? "text-emerald-400" : "text-amber-400"}`}>{Math.abs(position.entryVsMa50).toFixed(1)}%</div></div>
+                    </div>
+                  </div>
+                  );
+                })()}
+              </div>
             </div>
           </div>
         );
       })()}
-
-      {/* Entry Analysis Cards */}
-      {entry?.analysis && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
-            <div className="text-xs text-gray-500 uppercase">Your Avg Entry</div>
-            <div className="text-lg font-semibold text-white mt-1">{fmt(entry.analysis.actualAvgEntry)}</div>
-          </div>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
-            <div className="text-xs text-gray-500 uppercase">Period Avg Price</div>
-            <div className="text-lg font-semibold text-white mt-1">{fmt(entry.analysis.periodAvg)}</div>
-            <div className="text-xs text-gray-500">
-              {fmt(entry.analysis.periodLow)} &ndash; {fmt(entry.analysis.periodHigh)}
-            </div>
-          </div>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
-            <div className="text-xs text-gray-500 uppercase">vs DCA</div>
-            <div className={`text-lg font-semibold mt-1 ${glColor(entry.analysis.dcaSavings)}`}>
-              {entry.analysis.dcaSavings >= 0 ? "+" : ""}{fmt(entry.analysis.dcaSavings)}
-            </div>
-            <div className={`text-xs ${glColor(entry.analysis.dcaSavingsPct)}`}>
-              {entry.analysis.dcaSavingsPct >= 0 ? "Better" : "Worse"} than DCA by {Math.abs(entry.analysis.dcaSavingsPct).toFixed(1)}%
-            </div>
-          </div>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
-            <div className="text-xs text-gray-500 uppercase">Timing Score</div>
-            <div className="flex items-center gap-2 mt-1">
-              <div className="flex-1 h-2 bg-gray-700 rounded-full overflow-hidden">
-                <div className={`h-full rounded-full ${
-                  entry.analysis.timingScore >= 66 ? "bg-emerald-500" : entry.analysis.timingScore >= 33 ? "bg-amber-500" : "bg-red-500"
-                }`} style={{ width: `${entry.analysis.timingScore}%` }} />
-              </div>
-              <span className={`text-sm font-semibold ${
-                entry.analysis.timingScore >= 66 ? "text-emerald-400" : entry.analysis.timingScore >= 33 ? "text-amber-400" : "text-red-400"
-              }`}>
-                {entry.analysis.timingScore.toFixed(0)}%
-              </span>
-            </div>
-            <div className="text-xs text-gray-600 mt-1">100% = bought at low, 0% = at high</div>
-          </div>
-        </div>
-      )}
-
-      {/* Today's Signal */}
-      {tickerInfo && <TodaySignal tickerInfo={tickerInfo} />}
 
       <TickerChart symbol={position.ticker} lots={position.lots ?? []} cutoffDate={cutoffDate} />
 
@@ -357,8 +304,8 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
                   className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500" />
               </div>
               <button type="submit" disabled={adding}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 flex items-center gap-1">
-                {adding ? "Adding..." : <><Plus size={14} /> Add Lot</>}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">
+                {adding ? "Adding..." : <><Plus size={12} /> Add Lot</>}
               </button>
             </form>
           ) : (
@@ -372,8 +319,8 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
               />
               <p className="text-xs text-gray-600">Format: type, date, quantity, price, fees, notes</p>
               <button type="submit" disabled={adding}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 flex items-center gap-1">
-                {adding ? "Adding..." : <><Upload size={14} /> Add All Lots</>}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">
+                {adding ? "Adding..." : <><Upload size={12} /> Add All Lots</>}
               </button>
             </form>
           )}
@@ -391,16 +338,16 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-800">
-                  <th className="text-left px-4 py-2 text-xs text-gray-500 uppercase">Type</th>
-                  <th className="text-left px-4 py-2 text-xs text-gray-500 uppercase">Date</th>
-                  <th className="text-right px-4 py-2 text-xs text-gray-500 uppercase">Qty</th>
-                  <th className="text-right px-4 py-2 text-xs text-gray-500 uppercase">Price</th>
-                  <th className="text-right px-4 py-2 text-xs text-gray-500 uppercase">Total</th>
-                  <th className="text-center px-4 py-2 text-xs text-gray-500 uppercase">Grade</th>
-                  <th className="text-right px-4 py-2 text-xs text-gray-500 uppercase">vs Avg</th>
-                  <th className="text-center px-4 py-2 text-xs text-gray-500 uppercase">Timing</th>
-                  <th className="text-left px-4 py-2 text-xs text-gray-500 uppercase">Notes</th>
-                  <th className="px-4 py-2"></th>
+                  <th className="text-left px-3 py-2 text-xs text-gray-500 uppercase">Type</th>
+                  <th className="text-left px-3 py-2 text-xs text-gray-500 uppercase">Date</th>
+                  <th className="text-right px-3 py-2 text-xs text-gray-500 uppercase">Qty</th>
+                  <th className="text-right px-3 py-2 text-xs text-gray-500 uppercase">Price</th>
+                  <th className="text-right px-3 py-2 text-xs text-gray-500 uppercase">Total</th>
+                  <th className="text-center px-3 py-2 text-xs text-gray-500 uppercase">Grade</th>
+                  <th className="text-right px-3 py-2 text-xs text-gray-500 uppercase">vs Avg</th>
+                  <th className="text-center px-3 py-2 text-xs text-gray-500 uppercase">Timing</th>
+                  <th className="text-left px-3 py-2 text-xs text-gray-500 uppercase">Notes</th>
+                  <th className="px-3 py-2"></th>
                 </tr>
               </thead>
               <tbody>
@@ -408,16 +355,16 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
                   const a = entryMap.get(lot.id);
                   return (
                     <tr key={lot.id} className="border-b border-gray-800/50">
-                      <td className="px-4 py-2">
+                      <td className="px-3 py-2">
                         <span className={`text-xs font-medium px-2 py-0.5 rounded ${
                           lot.type === "buy" ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"
                         }`}>{lot.type.toUpperCase()}</span>
                       </td>
-                      <td className="px-4 py-2 text-gray-300">{fmtDate(lot.transactionDate)}</td>
-                      <td className="px-4 py-2 text-right text-gray-300">{lot.quantity}</td>
-                      <td className="px-4 py-2 text-right text-gray-300">{fmt(lot.price)}</td>
-                      <td className="px-4 py-2 text-right text-white font-medium">{fmt(lot.quantity * lot.price + lot.fees)}</td>
-                      <td className="px-4 py-2 text-center">
+                      <td className="px-3 py-2 text-gray-300">{fmtDate(lot.transactionDate)}</td>
+                      <td className="px-3 py-2 text-right text-gray-300">{lot.quantity}</td>
+                      <td className="px-3 py-2 text-right text-gray-300">{fmt(lot.price)}</td>
+                      <td className="px-3 py-2 text-right text-white font-medium">{fmt(lot.quantity * lot.price + lot.fees)}</td>
+                      <td className="px-3 py-2 text-center">
                         {(() => {
                           const entry = lotGrade(lot);
                           const now = currentGrade(lot);
@@ -431,10 +378,10 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
                           );
                         })()}
                       </td>
-                      <td className={`px-4 py-2 text-right text-xs ${a ? glColor(-a.vsAvg) : "text-gray-600"}`}>
+                      <td className={`px-3 py-2 text-right text-xs ${a ? glColor(-a.vsAvg) : "text-gray-600"}`}>
                         {a ? `${a.vsAvg >= 0 ? "+" : ""}${a.vsAvgPct.toFixed(1)}%` : "—"}
                       </td>
-                      <td className="px-4 py-2">
+                      <td className="px-3 py-2">
                         {a ? (
                           <div className="flex items-center justify-center gap-1">
                             <div className="w-12 h-1.5 bg-gray-700 rounded-full overflow-hidden">
@@ -446,8 +393,8 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
                           </div>
                         ) : <span className="text-gray-600 text-xs text-center block">—</span>}
                       </td>
-                      <td className="px-4 py-2 text-gray-500 truncate max-w-[120px]">{lot.notes}</td>
-                      <td className="px-4 py-2 text-right">
+                      <td className="px-3 py-2 text-gray-500 truncate max-w-[120px]">{lot.notes}</td>
+                      <td className="px-3 py-2 text-right">
                         <Tooltip label="Remove lot"><button onClick={() => handleRemoveLot(lot.id)} className="text-red-400 hover:text-red-300"><Trash2 size={14} /></button></Tooltip>
                       </td>
                     </tr>

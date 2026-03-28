@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ResponsiveContainer, ComposedChart, Line, Area, XAxis, YAxis, Tooltip, CartesianGrid, Legend, ReferenceLine } from "recharts";
 import { trpc } from "../trpc.js";
 import { DateInput } from "./DateInput.js";
@@ -6,6 +6,8 @@ import { fmtDate, fmtDateShort } from "../fmt.js";
 
 export function WhatIfChart({ portfolioId, cutoffDate, onSelectTicker }: { portfolioId: string; cutoffDate: string; onSelectTicker?: (ticker: string) => void }) {
   const [whatIfDate, setWhatIfDate] = useState(cutoffDate || "2024-01-02");
+  useEffect(() => { if (cutoffDate) setWhatIfDate(cutoffDate); }, [cutoffDate]);
+  const [wiSort, setWiSort] = useState<{ col: string; dir: "asc" | "desc" }>({ col: "absDiff", dir: "desc" });
   const { data, isLoading } = trpc.getWhatIfComparison.useQuery(
     { portfolioId, whatIfDate, from: new Date(new Date(whatIfDate).getTime() - 7 * 86400000).toISOString().split("T")[0] },
     { enabled: !!whatIfDate }
@@ -73,25 +75,6 @@ export function WhatIfChart({ portfolioId, cutoffDate, onSelectTicker }: { portf
               </div>
             </div>
 
-            {/* Per-ticker breakdown */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-              {data.positions.map((p) => {
-                const diff = p.actualCost - p.whatIfCost;
-                return (
-                  <div key={p.ticker} className={`bg-gray-800/50 rounded-lg p-3${onSelectTicker ? " cursor-pointer hover:bg-gray-800 transition-colors" : ""}`} onClick={() => onSelectTicker?.(p.ticker)}>
-                    <div className="text-sm font-medium text-white">{p.ticker}
-                      <span className="text-xs text-gray-500 ml-1">{p.actualShares} shares</span>
-                    </div>
-                    <div className="text-xs text-gray-500 mt-1">
-                      You paid {fmtFull(p.actualCost)} &middot; What-if {fmtFull(p.whatIfCost)}
-                    </div>
-                    <div className={`text-xs font-medium mt-1 ${diff > 0 ? "text-red-400" : diff < 0 ? "text-emerald-400" : "text-gray-400"}`}>
-                      {diff > 0 ? `+${fmtFull(diff)} more` : diff < 0 ? `${fmtFull(Math.abs(diff))} less` : "Same"}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
           </>
         );
       })()}
@@ -158,6 +141,59 @@ export function WhatIfChart({ portfolioId, cutoffDate, onSelectTicker }: { portf
       })()}
       {data && data.timeline.length === 0 && (
         <div className="text-gray-500 text-center py-8">No price data available. Backfill prices first.</div>
+      )}
+
+      {/* Per-ticker breakdown table */}
+      {data && data.positions.length > 0 && (
+        <div className="overflow-hidden rounded-lg border border-gray-700 mt-4">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-gray-700 bg-gray-800/50">
+                {([
+                  { key: "ticker", label: "Ticker", align: "left" },
+                  { key: "actualShares", label: "Shares", align: "right" },
+                  { key: "avgCost", label: "Avg Cost", align: "right" },
+                  { key: "actualCost", label: "Total Cost", align: "right" },
+                  { key: "avgWhatIf", label: "What-If Avg", align: "right" },
+                  { key: "whatIfCost", label: "What-If Total", align: "right" },
+                  { key: "diff", label: "Difference", align: "right" },
+                  { key: "diffPct", label: "Diff %", align: "right" },
+                ] as const).map((col) => (
+                  <th key={col.key} onClick={() => setWiSort((s) => ({ col: col.key, dir: s.col === col.key && s.dir === "asc" ? "desc" : "asc" }))}
+                    className={`text-${col.align} px-3 py-2 text-xs text-gray-500 uppercase cursor-pointer hover:text-gray-300 select-none whitespace-nowrap`}>
+                    {col.label}{wiSort.col === col.key ? (wiSort.dir === "asc" ? " ▲" : " ▼") : ""}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[...data.positions].map((p) => ({ ...p, diff: p.actualCost - p.whatIfCost, absDiff: Math.abs(p.actualCost - p.whatIfCost), diffPct: p.whatIfCost > 0 ? ((p.actualCost - p.whatIfCost) / p.whatIfCost) * 100 : 0, avgCost: p.actualShares > 0 ? p.actualCost / p.actualShares : 0, avgWhatIf: p.actualShares > 0 ? p.whatIfCost / p.actualShares : 0 }))
+                .sort((a, b) => {
+                  const av = (a as any)[wiSort.col] ?? 0;
+                  const bv = (b as any)[wiSort.col] ?? 0;
+                  const cmp = typeof av === "string" ? av.localeCompare(bv) : av - bv;
+                  return wiSort.dir === "asc" ? cmp : -cmp;
+                })
+                .map((p) => (
+                <tr key={p.ticker} onClick={() => onSelectTicker?.(p.ticker)}
+                  className={`border-b border-gray-800/50 ${onSelectTicker ? "cursor-pointer hover:bg-gray-800/30" : ""}`}>
+                  <td className="px-3 py-2 font-medium text-white">{p.ticker}</td>
+                  <td className="px-3 py-2 text-right text-gray-300">{p.actualShares}</td>
+                  <td className="px-3 py-2 text-right text-gray-300">{fmtFull(p.avgCost)}</td>
+                  <td className="px-3 py-2 text-right text-gray-300">{fmtFull(p.actualCost)}</td>
+                  <td className={`px-3 py-2 text-right ${p.avgWhatIf > p.avgCost ? "text-red-400" : p.avgWhatIf < p.avgCost ? "text-emerald-400" : "text-gray-300"}`}>{fmtFull(p.avgWhatIf)}</td>
+                  <td className={`px-3 py-2 text-right ${p.whatIfCost > p.actualCost ? "text-red-400" : p.whatIfCost < p.actualCost ? "text-emerald-400" : "text-gray-300"}`}>{fmtFull(p.whatIfCost)}</td>
+                  <td className={`px-3 py-2 text-right font-medium ${p.diff > 0 ? "text-red-400" : p.diff < 0 ? "text-emerald-400" : "text-gray-400"}`}>
+                    {fmtFull(Math.abs(p.diff))}
+                  </td>
+                  <td className={`px-3 py-2 text-right font-medium ${p.diffPct > 0 ? "text-red-400" : p.diffPct < 0 ? "text-emerald-400" : "text-gray-400"}`}>
+                    {Math.abs(p.diffPct).toFixed(1)}%
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

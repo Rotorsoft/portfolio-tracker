@@ -1,10 +1,12 @@
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { Info } from "lucide-react";
 
-export function Tooltip({ label, children, className }: {
+export function Tooltip({ label, children, className, icon }: {
   label: string;
   children: React.ReactNode;
   className?: string;
+  icon?: boolean;
 }) {
   const [show, setShow] = useState(false);
   const ref = useRef<HTMLSpanElement>(null);
@@ -13,11 +15,19 @@ export function Tooltip({ label, children, className }: {
   return (
     <span
       ref={ref}
-      className={`inline-flex ${className ?? ""}`}
-      onMouseEnter={() => setShow(true)}
+      className={`inline-flex items-start ${icon ? "gap-px" : ""} ${className ?? ""}`}
+      onMouseEnter={() => !icon && setShow(true)}
       onMouseLeave={() => setShow(false)}
     >
       {children}
+      {icon && (
+        <span
+          onClick={(e) => { e.stopPropagation(); setShow((s) => !s); }}
+          className="cursor-help shrink-0 mt-px"
+        >
+          <Info size={8} className="text-gray-600 hover:text-gray-400" />
+        </span>
+      )}
       {show && rect && createPortal(
         <div
           className="fixed z-[9999] pointer-events-none"

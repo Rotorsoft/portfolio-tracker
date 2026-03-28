@@ -4,7 +4,7 @@ import postgres from "postgres";
 import { sql } from "drizzle-orm";
 import * as schema from "./schema.js";
 
-export { users, portfolios, positions, lots, tickers, prices } from "./schema.js";
+export { users, portfolios, positions, lots, tickers, tickerFundamentals, prices } from "./schema.js";
 
 /** PostgresStore deserializes ISO dates to Date objects via dateReviver.
  *  Drizzle text columns need strings. This safely converts. */

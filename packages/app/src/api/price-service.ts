@@ -1,4 +1,4 @@
-import type { PriceRecord } from "@portfolio-tracker/domain";
+import type { PriceRecord, FundamentalsView } from "@portfolio-tracker/domain";
 
 export type FetchResult = {
   prices: PriceRecord[];
@@ -62,4 +62,88 @@ export async function fetchPrices(
   }
 
   return { prices, meta };
+}
+
+// Yahoo Finance crumb/cookie cache (needed for v10 API)
+let _yfCrumb: string | null = null;
+let _yfCookie: string | null = null;
+
+async function getYahooCrumb(): Promise<{ crumb: string; cookie: string }> {
+  if (_yfCrumb && _yfCookie) return { crumb: _yfCrumb, cookie: _yfCookie };
+
+  // Step 1: get cookies from consent endpoint
+  const initRes = await fetch("https://fc.yahoo.com", {
+    headers: { "User-Agent": "Mozilla/5.0" },
+    redirect: "manual",
+  });
+  const setCookie = initRes.headers.getSetCookie?.() ?? [];
+  const cookie = setCookie.map((c) => c.split(";")[0]).join("; ");
+
+  // Step 2: get crumb using those cookies
+  const crumbRes = await fetch("https://query2.finance.yahoo.com/v1/test/getcrumb", {
+    headers: { "User-Agent": "Mozilla/5.0", Cookie: cookie },
+  });
+  const crumb = await crumbRes.text();
+  if (!crumb || crumb.includes("error")) throw new Error("Failed to get Yahoo crumb");
+
+  _yfCrumb = crumb;
+  _yfCookie = cookie;
+  return { crumb, cookie };
+}
+
+/**
+ * Fetches fundamental data (P/E, EPS, yield, etc.) from Yahoo Finance v10 quoteSummary.
+ */
+export async function fetchFundamentals(
+  symbol: string
+): Promise<Omit<FundamentalsView, "symbol" | "fetchedAt">> {
+  const { crumb, cookie } = await getYahooCrumb();
+  const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=summaryDetail,defaultKeyStatistics,assetProfile&crumb=${encodeURIComponent(crumb)}`;
+
+  const response = await fetch(url, {
+    headers: { "User-Agent": "Mozilla/5.0", Cookie: cookie },
+  });
+
+  if (response.status === 401) {
+    // Crumb expired, clear and retry once
+    _yfCrumb = null;
+    _yfCookie = null;
+    const fresh = await getYahooCrumb();
+    const retryUrl = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=summaryDetail,defaultKeyStatistics,assetProfile&crumb=${encodeURIComponent(fresh.crumb)}`;
+    const retryRes = await fetch(retryUrl, {
+      headers: { "User-Agent": "Mozilla/5.0", Cookie: fresh.cookie },
+    });
+    if (!retryRes.ok) throw new Error(`Yahoo Finance API error for ${symbol}: ${retryRes.status}`);
+    const json = (await retryRes.json()) as any;
+    return extractFundamentals(json, symbol);
+  }
+
+  if (!response.ok) throw new Error(`Yahoo Finance API error for ${symbol}: ${response.status}`);
+  const json = (await response.json()) as any;
+  return extractFundamentals(json, symbol);
+}
+
+function extractFundamentals(json: any, symbol: string): Omit<FundamentalsView, "symbol" | "fetchedAt"> {
+  const result = json.quoteSummary?.result?.[0];
+  if (!result) throw new Error(`No quote data for ${symbol}`);
+
+  const sd = result.summaryDetail ?? {};
+  const ks = result.defaultKeyStatistics ?? {};
+  const ap = result.assetProfile ?? {};
+  const raw = (obj: any) => obj?.raw ?? null;
+
+  return {
+    trailingPE: raw(sd.trailingPE),
+    forwardPE: raw(sd.forwardPE) ?? raw(ks.forwardPE),
+    epsTrailing: raw(ks.trailingEps),
+    epsForward: raw(ks.forwardEps),
+    dividendYield: raw(sd.dividendYield),
+    marketCap: raw(sd.marketCap),
+    bookValue: raw(ks.bookValue),
+    priceToBook: raw(ks.priceToBook),
+    fiftyTwoWeekHigh: raw(sd.fiftyTwoWeekHigh),
+    fiftyTwoWeekLow: raw(sd.fiftyTwoWeekLow),
+    sector: ap.sector ?? null,
+    industry: ap.industry ?? null,
+  };
 }

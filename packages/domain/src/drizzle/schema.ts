@@ -84,6 +84,23 @@ export const tickers = pgTable("tickers", {
   signal: text("signal").notNull().default("hold"),
 });
 
+export const tickerFundamentals = pgTable("ticker_fundamentals", {
+  symbol: text("symbol").primaryKey(),
+  trailingPE: real("trailing_pe"),
+  forwardPE: real("forward_pe"),
+  epsTrailing: real("eps_trailing"),
+  epsForward: real("eps_forward"),
+  dividendYield: real("dividend_yield"),
+  marketCap: real("market_cap"),
+  bookValue: real("book_value"),
+  priceToBook: real("price_to_book"),
+  fiftyTwoWeekHigh: real("fifty_two_week_high"),
+  fiftyTwoWeekLow: real("fifty_two_week_low"),
+  sector: text("sector"),
+  industry: text("industry"),
+  fetchedAt: text("fetched_at").notNull(),
+});
+
 export const prices = pgTable(
   "prices",
   {
