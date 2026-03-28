@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "../hooks/useAuth.js";
 import { useEventStream } from "../hooks/useEventStream.js";
+import { useServerDown } from "../App.js";
 import { LoginForm } from "./LoginForm.js";
 import { PortfolioList } from "../views/PortfolioList.js";
 import { PortfolioDetail } from "../views/PortfolioDetail.js";
@@ -11,13 +12,34 @@ type Tab = "portfolios" | "events";
 export function Shell() {
   const { user, loading, signOut } = useAuth();
   const { events, connected } = useEventStream();
+  const serverDown = useServerDown();
   const [tab, setTab] = useState<Tab>("portfolios");
   const [selectedPortfolio, setSelectedPortfolio] = useState<string | null>(null);
 
-  if (loading) {
+  if (loading && !serverDown) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
         <div className="text-gray-400 text-lg">Loading...</div>
+      </div>
+    );
+  }
+
+  if (serverDown) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="text-red-400 text-5xl">!</div>
+          <h2 className="text-xl font-semibold text-white">Server Unavailable</h2>
+          <p className="text-gray-400 text-sm max-w-sm">
+            Cannot connect to the server. Make sure it is running and try again.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
