@@ -40,7 +40,7 @@ export function WhatIfChart({ portfolioId, cutoffDate, onSelectTicker }: { portf
         return (
           <>
             {/* Totals */}
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-3">
+            <div className="flex flex-wrap gap-3 mb-3">
               <div className="bg-gray-800/50 rounded-lg p-3 border border-gray-700">
                 <div className="text-xs text-gray-500">Cost Basis</div>
                 <div className="text-sm font-semibold text-white">{fmtFull(totalActual)}</div>
@@ -145,7 +145,7 @@ export function WhatIfChart({ portfolioId, cutoffDate, onSelectTicker }: { portf
 
       {/* Per-ticker breakdown table */}
       {data && data.positions.length > 0 && (
-        <div className="overflow-hidden rounded-lg border border-gray-700 mt-4">
+        <div className="overflow-x-auto rounded-lg border border-gray-700 mt-4">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-gray-700 bg-gray-800/50">

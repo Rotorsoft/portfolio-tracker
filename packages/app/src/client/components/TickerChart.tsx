@@ -59,8 +59,8 @@ export function TickerChart({ symbol, lots, cutoffDate }: { symbol: string; lots
     : 0;
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-6">
-      <div className="flex items-center gap-3 mb-4">
+    <div className="bg-gray-900 border border-gray-800 rounded-xl px-1 py-2 mb-4">
+      <div className="flex items-center gap-3 mb-4 px-3">
         <h3 className="text-sm font-medium text-gray-400">{symbol} Price &amp; Transactions</h3>
         <button onClick={() => setShowMA(!showMA)}
           className={`text-xs px-2 py-0.5 rounded ${showMA ? "bg-amber-600/20 text-amber-400" : "text-gray-600 hover:text-gray-400"}`}>
@@ -72,7 +72,7 @@ export function TickerChart({ symbol, lots, cutoffDate }: { symbol: string; lots
         </button>
       </div>
       <ResponsiveContainer width="100%" height={300}>
-        <ComposedChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+        <ComposedChart data={chartData} margin={{ top: 0, right: -15, bottom: 0, left: -20 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
           <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#64748b" }} tickFormatter={fmtDateShort} interval="preserveStartEnd" />
           <YAxis yAxisId="price" tick={{ fontSize: 11, fill: "#64748b" }} domain={["auto", "auto"]} />

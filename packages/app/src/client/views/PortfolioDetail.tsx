@@ -45,6 +45,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
 
   const getSortVal = (pos: any, col: string) => {
     if (col === "pe") return bulkFundamentals?.[pos.ticker]?.trailingPE ?? 0;
+    if (col === "yield") return bulkFundamentals?.[pos.ticker]?.dividendYield ?? 0;
     if (col === "entryGrade") return pos.entryGradeScore ?? 0;
     return pos[col] ?? 0;
   };
@@ -284,7 +285,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
       {subTab === "positions" && (
         <>
           {showAdd === "positions" && (
-            <form onSubmit={handleAddPositions} className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4 flex gap-3">
+            <form onSubmit={handleAddPositions} className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4 flex flex-wrap gap-3">
               <input type="text" placeholder="Ticker symbols (e.g. AAPL, MSFT, GOOG)" value={tickers} onChange={(e) => setTickers(e.target.value)} autoFocus
                 className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" required />
               <div className="flex gap-2">
@@ -295,11 +296,11 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
           )}
 
           {showAdd === "lots" && (
-            <form onSubmit={handleSubmitLots} className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4 space-y-3">
+            <form onSubmit={handleSubmitLots} className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4 space-y-3 overflow-x-auto">
               <div className="flex items-center gap-3 mb-2">
                 <DateInput value={lotDate} onChange={setLotDate} label="Date" />
               </div>
-              <table className="w-full text-sm">
+              <table className="w-full text-xs">
                 <thead>
                   <tr className="text-xs text-gray-500 uppercase">
                     <th className="text-left px-1 py-1 w-24">Ticker</th>
@@ -335,7 +336,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
           )}
 
           <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-gray-800">
                   {[
@@ -348,6 +349,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                     { key: "unrealizedGLPercent", label: "G/L %", align: "right" },
                     { key: "lots", label: "Lots", align: "right" },
                     { key: "pe", label: "P/E", align: "right" },
+                    { key: "yield", label: "Yield", align: "right" },
                   ].map((col) => (
                     <th key={col.key} onClick={() => toggleSort(col.key)}
                       className={`text-${col.align} px-3 py-2 text-xs text-gray-500 uppercase cursor-pointer hover:text-gray-300 select-none whitespace-nowrap`}>
@@ -373,7 +375,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                     </InfoTip>
                   </th>
                   <th onClick={() => toggleSort("dcaSavingsPct")}
-                    className="text-right px-3 py-2 text-xs text-gray-500 uppercase cursor-pointer hover:text-gray-300 select-none whitespace-nowrap">
+                    className="text-center px-3 py-2 text-xs text-gray-500 uppercase cursor-pointer hover:text-gray-300 select-none whitespace-nowrap">
                     vs DCA{sortCol === "dcaSavingsPct" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
                     <InfoTip>
                       <div className="space-y-1.5">
@@ -462,6 +464,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                     <td className={`px-3 py-2 text-right font-medium ${glColor(pos.unrealizedGLPercent)}`}>{fmtPct(pos.unrealizedGLPercent)}</td>
                     <td className="px-3 py-2 text-right text-gray-500">{pos.lots}</td>
                     <td className="px-3 py-2 text-right text-gray-300 text-xs">{bulkFundamentals?.[pos.ticker]?.trailingPE?.toFixed(1) ?? "—"}</td>
+                    <td className="px-3 py-2 text-right text-gray-300 text-xs">{(() => { const dy = bulkFundamentals?.[pos.ticker]?.dividendYield; return dy != null ? `${(dy * 100).toFixed(2)}%` : "—"; })()}</td>
                     <td className="px-3 py-2">
                       <div className="flex items-center justify-center gap-1">
                         <div className="w-12 h-1.5 bg-gray-700 rounded-full overflow-hidden">
@@ -469,10 +472,9 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                             pos.timingScore >= 66 ? "bg-emerald-500" : pos.timingScore >= 33 ? "bg-amber-500" : "bg-red-500"
                           }`} style={{ width: `${pos.timingScore}%` }} />
                         </div>
-                        <span className="text-xs text-gray-500">{pos.timingScore.toFixed(0)}%</span>
                       </div>
                     </td>
-                    <td className={`px-3 py-2 text-right text-xs font-medium ${pos.dcaSavingsPct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                    <td className={`px-3 py-2 text-center text-xs font-medium ${pos.dcaSavingsPct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                       {Math.abs(pos.dcaSavingsPct).toFixed(1)}%
                     </td>
                     <td className="px-3 py-2 text-center">
@@ -567,7 +569,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
             );
           })()}
           <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-gray-800">
                 <th className="text-left px-3 py-2 text-xs text-gray-500 uppercase">Symbol</th>
