@@ -157,7 +157,7 @@ function calcPositionStats(posLots: Lot[]) {
 /** Recalculate timing score and DCA comparison for a position */
 export async function recalcPositionAnalytics(positionId: string) {
   const { getTickerPrices } = await import("./ticker.js");
-  const { smaAtDate, maxDrawdownSince, countDaysBelow, yearlyRange, yearlyRangePosition } = await import("./indicators.js");
+  const { smaAtDate, maxDrawdownSince, countDaysBelow, yearlyRange, yearlyRangePosition, computeEntryGrade, gradeExplanation } = await import("./indicators.js");
   const pos = await db().select().from(positions).where(eq(positions.id, positionId));
   if (pos.length === 0) return;
   const ticker = pos[0].ticker;
@@ -208,6 +208,19 @@ export async function recalcPositionAnalytics(positionId: string) {
   const yr = yearlyRange(allPrices);
   const yrPct = yearlyRangePosition(avgEntry, yr.high, yr.low);
 
+  // Per-lot grades
+  for (const lot of buyLots) {
+    const lg = computeEntryGrade(allPrices, lot.price, lot.transactionDate);
+    await db().update(lots).set({
+      grade: lg.grade,
+      gradeScore: lg.total,
+      gradeExplanation: gradeExplanation(lg),
+    }).where(eq(lots.id, lot.id));
+  }
+
+  // Entry grade (composite of RSI, Bollinger, MA trend, timing, volume at entry)
+  const entryGradeResult = computeEntryGrade(allPrices, avgEntry, firstDate);
+
   await db().update(positions).set({
     timingScore, dcaSavingsPct, periodAvg, periodLow, periodHigh,
     ma50AtEntry: Math.round(weightedMa50 * 100) / 100,
@@ -216,6 +229,10 @@ export async function recalcPositionAnalytics(positionId: string) {
     maxDrawdown: Math.round(maxDd * 100) / 100,
     daysUnderwater: underwater,
     yearlyRangePct: Math.round(yrPct * 100) / 100,
+    entryGrade: entryGradeResult.grade,
+    entryGradeScore: entryGradeResult.total,
+    rsiAtEntry: entryGradeResult.rsiScore,
+    bollingerPctAtEntry: entryGradeResult.bollingerScore,
   }).where(eq(positions.id, positionId));
 }
 

@@ -36,6 +36,13 @@
       "when": 1774750000000,
       "tag": "0004_0004_ticker_fundamentals",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1774850000000,
+      "tag": "0005_0005_composite_signals",
+      "breakpoints": true
     }
   ]
 }

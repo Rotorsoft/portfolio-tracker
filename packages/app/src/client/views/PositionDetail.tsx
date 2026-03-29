@@ -14,7 +14,6 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
   const { data: position } = trpc.getPosition.useQuery({ positionId });
   const { data: tickerInfo } = trpc.getTicker.useQuery({ symbol: ticker });
   const { data: entry } = trpc.getEntryAnalysis.useQuery({ positionId });
-  const { data: overlays } = trpc.getChartOverlays.useQuery({ symbol: ticker });
   const { data: fundamentals } = trpc.getFundamentals.useQuery({ symbol: ticker }, { staleTime: 5 * 60 * 1000 });
   const addMutation = trpc.addLot.useMutation();
   const removeMutation = trpc.removeLot.useMutation();
@@ -108,48 +107,15 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
   const fmt = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
   const glColor = (val: number) => val >= 0 ? "text-emerald-400" : "text-red-400";
 
-  // Grade: crossover is primary factor, price vs MA50 is secondary
-  // Uptrend (golden cross): A = dip below MA50, B = near/above MA50
-  // No trend: C
-  // Downtrend (death cross): D = below MA50 (falling knife), F = above MA50 (chasing)
-  const ma50Map = new Map(overlays?.ma50?.map((m) => [m.date, m.value]) ?? []);
-  const ma200Map = new Map(overlays?.ma200?.map((m) => [m.date, m.value]) ?? []);
-  const computeGrade = (price: number, ma50: number, ma200: number) => {
-    const vsMa50 = ((price - ma50) / ma50) * 100;
-    const goldenCross = ma50 > ma200 && ma200 > 0;
-    const deathCross = ma50 < ma200 && ma200 > 0;
-    if (goldenCross && vsMa50 < -2) return "A";  // dip buy in uptrend
-    if (goldenCross) return "B";                   // buying in uptrend
-    if (deathCross && vsMa50 > 2) return "F";      // chasing in downtrend
-    if (deathCross) return "D";                     // buying in downtrend
-    return "C";                                     // no clear trend
-  };
-  const lotGrade = (lot: { type: string; transactionDate: string; price: number }) => {
-    if (lot.type !== "buy") return null;
-    const ma50 = ma50Map.get(lot.transactionDate);
-    if (!ma50) return null;
-    const ma200 = ma200Map.get(lot.transactionDate) ?? 0;
-    return computeGrade(lot.price, ma50, ma200);
-  };
-  const currentGrade = (lot: { type: string; price: number }) => {
-    if (lot.type !== "buy") return null;
-    const ma50 = tickerInfo?.ma50;
-    if (!ma50) return null;
-    const ma200 = tickerInfo?.ma200 ?? 0;
-    return computeGrade(lot.price, ma50, ma200);
-  };
+  // Lot grades come from server (entry?.analysis?.lots[].grade)
+  const entryLots = entry?.analysis?.lots ?? [];
+  const lotGradeMap = new Map(entryLots.map((l: any) => [l.lotId, l]));
   const gradeColor = (g: string) =>
     g === "A" ? "bg-emerald-500/20 text-emerald-400" :
     g === "B" ? "bg-emerald-500/10 text-emerald-400" :
     g === "C" ? "bg-amber-500/10 text-amber-400" :
     g === "D" ? "bg-red-500/10 text-red-400" :
     "bg-red-500/20 text-red-400";
-  const gradeLabel = (g: string) =>
-    g === "A" ? "Dip buy in uptrend" :
-    g === "B" ? "Buying in uptrend" :
-    g === "C" ? "No clear trend" :
-    g === "D" ? "Buying in downtrend" :
-    "Chasing in downtrend";
 
   return (
     <div>
@@ -169,22 +135,6 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
         const a = entry?.analysis;
         const f = fundamentals;
         const ti = tickerInfo;
-        const vsMa50 = ti && ti.ma50 > 0 ? ((currentPrice - ti.ma50) / ti.ma50 * 100) : 0;
-        const vsMa200 = ti && ti.ma200 > 0 ? ((currentPrice - ti.ma200) / ti.ma200 * 100) : 0;
-        const goldenCross = ti ? ti.ma50 > ti.ma200 && ti.ma200 > 0 : false;
-        const deathCross = ti ? ti.ma50 < ti.ma200 && ti.ma200 > 0 : false;
-        const signalColor =
-          ti?.signal === "strong buy" ? "bg-emerald-500/20 text-emerald-400" :
-          ti?.signal === "buy" ? "bg-emerald-500/10 text-emerald-400" :
-          ti?.signal === "strong sell" ? "bg-red-500/20 text-red-400" :
-          ti?.signal === "sell" ? "bg-red-500/10 text-red-400" :
-          "bg-gray-700 text-gray-400";
-        const recommendation =
-          ti?.signal === "strong buy" ? `Dip buy — price ${Math.abs(vsMa50).toFixed(1)}% below MA50 in uptrend` :
-          ti?.signal === "buy" ? `Uptrend — golden cross, ${Math.abs(vsMa50).toFixed(1)}% vs MA50` :
-          ti?.signal === "strong sell" ? `Bear rally — ${Math.abs(vsMa50).toFixed(1)}% above MA50 in downtrend` :
-          ti?.signal === "sell" ? `Downtrend — death cross, ${Math.abs(vsMa50).toFixed(1)}% vs MA50` :
-          "MAs converging — no clear trend";
 
         const hasFundamentals = f && (f.trailingPE != null || f.epsTrailing != null || f.dividendYield != null || f.marketCap != null || f.sector);
 
@@ -197,10 +147,6 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
                   {position.ticker}
                   {ti?.name && <span className="text-sm font-normal text-gray-400 ml-2">{ti.name}</span>}
                 </h2>
-                {ti && <>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${signalColor}`}>{ti.signal?.toUpperCase()}</span>
-                  <span className={`text-xs ${ti.signal?.includes("buy") ? "text-emerald-400" : ti.signal?.includes("sell") ? "text-red-400" : "text-gray-500"}`}>{recommendation}</span>
-                </>}
               </div>
               <button
                 onClick={() => setShowAdd(!showAdd)}
@@ -210,21 +156,21 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
               </button>
             </div>
             {/* Stats groups */}
-            <div className="bg-gray-900 border border-gray-800 rounded-lg px-4 py-3">
-              <div className="flex justify-between">
+            <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-x-auto">
+              <div className="flex min-w-max px-4 py-3">
                 {/* Position */}
-                <div className="pr-5 border-r border-gray-800 flex-1">
+                <div className="pr-5 border-r border-gray-800">
                   <div className="text-[10px] text-gray-500 font-medium uppercase tracking-wider mb-1.5">Position</div>
-                  <div className="flex justify-between">
+                  <div className="flex gap-5">
                     <div className="text-center"><div className="text-[11px] text-gray-500">Shares</div><div className="text-sm font-semibold text-white">{shares.toLocaleString()}</div><div className="text-[11px] text-gray-600">Avg {fmt(avgCost)}</div></div>
                     <div className="text-center"><div className="text-[11px] text-gray-500">Cost</div><div className="text-sm font-semibold text-white">{fmt(cost)}</div></div>
                     <div className="text-center"><div className="text-[11px] text-gray-500">Value</div><div className="text-sm font-semibold text-white">{currentPrice > 0 ? fmt(marketValue) : "—"}</div>{currentPrice > 0 && <div className="text-[11px] text-gray-600">@ {fmt(currentPrice)}</div>}</div>
                     <div className="text-center"><div className="text-[11px] text-gray-500">G/L</div><div className={`text-sm font-semibold ${glColor(unrealizedGL)}`}>{currentPrice > 0 ? fmt(unrealizedGL) : "—"}</div>{currentPrice > 0 && <div className={`text-[11px] ${glColor(glPct)}`}>{Math.abs(glPct).toFixed(1)}%</div>}</div>
                   </div>
                 </div>
-                {/* Market Data (technicals + fundamentals) */}
+                {/* Market */}
                 {ti && (
-                  <div className="px-5 border-r border-gray-800 shrink-0">
+                  <div className="px-5 border-r border-gray-800">
                     <div className="text-[10px] text-gray-500 font-medium uppercase tracking-wider mb-1.5">Market</div>
                     <div className="flex gap-4">
                       <div className="text-center"><div className="text-[11px] text-gray-500">Price</div><div className="text-sm font-semibold text-white">{fmt(currentPrice)}</div></div>
@@ -239,21 +185,44 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
                     </div>
                   </div>
                 )}
-                {/* Timing */}
-                {a && ti && (() => {
-                  const grade = computeGrade(avgCost, ti.ma50, ti.ma200);
-                  const gradeBg = grade === "A" ? "bg-emerald-500/10 border-emerald-500/20" : grade === "B" ? "bg-emerald-500/5 border-emerald-500/10" : grade === "C" ? "bg-amber-500/5 border-amber-500/10" : "bg-red-500/5 border-red-500/10";
-                  const gradeText = grade === "A" || grade === "B" ? "text-emerald-400" : grade === "C" ? "text-amber-400" : "text-red-400";
+                {/* Entry */}
+                {a && (
+                  <div className="px-5 border-r border-gray-800">
+                    {(() => {
+                      const grade = position.entryGrade ?? "C";
+                      const gradeScore = position.entryGradeScore ?? 50;
+                      const gradeText = grade === "A" || grade === "B" ? "text-emerald-400" : grade === "C" ? "text-amber-400" : "text-red-400";
+                      return (
+                    <>
+                      <div className="text-[10px] text-gray-500 font-medium uppercase tracking-wider mb-1.5">Entry <Tooltip label={`${grade} (${gradeScore.toFixed(0)}/100) — Composite of RSI, Bollinger, MA trend, price timing, and volume at entry. A=85+, B=70+, C=55+, D=40+, F=below 40`} icon><span className={`text-sm font-bold ${gradeText}`}>{grade}</span></Tooltip> <span className="text-[10px] text-gray-600">{gradeScore.toFixed(0)}</span></div>
+                      <div className="flex gap-4">
+                        <div className="text-center"><Tooltip label="100% = bought at low, 0% = at high" icon><span className="text-[11px] text-gray-500">Score</span></Tooltip><div className={`text-sm font-semibold ${a.timingScore >= 66 ? "text-emerald-400" : a.timingScore >= 33 ? "text-amber-400" : "text-red-400"}`}>{a.timingScore.toFixed(0)}%</div></div>
+                        <div className="text-center"><Tooltip label="Your entry vs dollar-cost averaging" icon><span className="text-[11px] text-gray-500">DCA</span></Tooltip><div className={`text-sm font-semibold ${glColor(a.dcaSavingsPct)}`}>{Math.abs(a.dcaSavingsPct).toFixed(1)}%</div></div>
+                        <div className="text-center"><Tooltip label="Entry price vs MA50 at time of purchase" icon><span className="text-[11px] text-gray-500">vs MA50</span></Tooltip><div className={`text-sm font-medium ${position.entryVsMa50 <= 0 ? "text-emerald-400" : "text-amber-400"}`}>{Math.abs(position.entryVsMa50).toFixed(1)}%</div></div>
+                        <div className="text-center"><Tooltip label="Max drawdown / days underwater since entry" icon><span className="text-[11px] text-gray-500">DD</span></Tooltip><div className="text-sm"><span className="font-semibold text-red-400">{position.maxDrawdown > 0 ? `${position.maxDrawdown.toFixed(1)}%` : "—"}</span><span className="text-gray-600"> {position.daysUnderwater}d</span></div></div>
+                      </div>
+                    </>
+                      );
+                    })()}
+                  </div>
+                )}
+                {/* Signal (current composite) */}
+                {ti && (() => {
+                  const sigColor = ti.signal?.includes("buy") ? "text-emerald-400" : ti.signal?.includes("sell") ? "text-red-400" : "text-gray-400";
+                  const sigBg = ti.signal?.includes("buy") ? "bg-emerald-500/10 border-emerald-500/20" : ti.signal?.includes("sell") ? "bg-red-500/10 border-red-500/20" : "bg-gray-800/50 border-gray-700";
+                  const priceMa50 = ti.ma50 > 0 ? ((currentPrice - ti.ma50) / ti.ma50 * 100) : 0;
+                  const priceMa200 = ti.ma200 > 0 ? ((currentPrice - ti.ma200) / ti.ma200 * 100) : 0;
+                  const gc = ti.ma50 > ti.ma200 && ti.ma200 > 0;
+                  const dc = ti.ma50 < ti.ma200 && ti.ma200 > 0;
+                  const rsiLabel = (ti.rsi14 ?? 50) < 30 ? "oversold" : (ti.rsi14 ?? 50) > 70 ? "overbought" : "";
                   return (
-                  <div className={`pl-5 flex-1 -my-3 -mr-4 py-3 pr-4 rounded-r-lg border-l ${gradeBg}`}>
-                    <div className="text-[10px] text-gray-500 font-medium uppercase tracking-wider mb-1.5">Grade <Tooltip label={`${grade}: ${grade === "A" ? "Dip buy in uptrend — entry below MA50 during golden cross" : grade === "B" ? "Buying in uptrend — golden cross confirmed" : grade === "C" ? "No clear trend — MAs converging" : grade === "D" ? "Buying in downtrend — death cross confirmed" : "Chasing in downtrend — entry above MA50 during death cross"}`} icon><span className={`text-sm font-bold ${gradeText}`}>{grade}</span></Tooltip></div>
-                    <div className="flex justify-between">
-                      <div className="text-center"><Tooltip label="Price vs 50/200-day MAs" icon><span className="text-[11px] text-gray-500">MAs</span></Tooltip><div className="text-sm"><span className={`font-medium ${vsMa50 >= 0 ? "text-emerald-400" : "text-red-400"}`}>{Math.abs(vsMa50).toFixed(1)}%</span><span className="text-gray-600"> / </span><span className={`font-medium ${vsMa200 >= 0 ? "text-emerald-400" : "text-red-400"}`}>{ti.ma200 > 0 ? `${Math.abs(vsMa200).toFixed(1)}%` : "—"}</span></div></div>
-                      <div className="text-center"><Tooltip label="Golden Cross = uptrend, Death Cross = downtrend" icon><span className="text-[11px] text-gray-500">Cross</span></Tooltip><div className={`text-sm font-medium ${goldenCross ? "text-emerald-400" : deathCross ? "text-red-400" : "text-gray-400"}`}>{goldenCross ? "Golden ↑" : deathCross ? "Death ↓" : "—"}</div></div>
-                      <div className="text-center"><Tooltip label="100% = bought at low, 0% = at high" icon><span className="text-[11px] text-gray-500">Score</span></Tooltip><div className={`text-sm font-semibold ${a.timingScore >= 66 ? "text-emerald-400" : a.timingScore >= 33 ? "text-amber-400" : "text-red-400"}`}>{a.timingScore.toFixed(0)}%</div></div>
-                      <div className="text-center"><Tooltip label="Your entry vs dollar-cost averaging" icon><span className="text-[11px] text-gray-500">DCA</span></Tooltip><div className={`text-sm font-semibold ${glColor(a.dcaSavingsPct)}`}>{Math.abs(a.dcaSavingsPct).toFixed(1)}%</div></div>
-                      <div className="text-center"><Tooltip label="Max drawdown / days underwater" icon><span className="text-[11px] text-gray-500">DD</span></Tooltip><div className="text-sm"><span className="font-semibold text-red-400">{position.maxDrawdown > 0 ? `${position.maxDrawdown.toFixed(1)}%` : "—"}</span><span className="text-gray-600"> {position.daysUnderwater}d</span></div></div>
-                      <div className="text-center"><Tooltip label="Entry price vs MA50 at time of purchase" icon><span className="text-[11px] text-gray-500">Entry</span></Tooltip><div className={`text-sm font-medium ${position.entryVsMa50 <= 0 ? "text-emerald-400" : "text-amber-400"}`}>{Math.abs(position.entryVsMa50).toFixed(1)}%</div></div>
+                  <div className={`pl-5 flex-1 -my-3 -mr-4 py-3 pr-4 rounded-r-lg border-l ${sigBg}`}>
+                    <div className="text-[10px] text-gray-500 font-medium uppercase tracking-wider mb-1.5">Signal <Tooltip label="Composite of RSI (20%), MACD (25%), Bollinger (15%), MA trend (20%), momentum (10%), volume (10%)" icon><span className={`text-sm font-bold ${sigColor}`}>{ti.signal?.toUpperCase()}</span></Tooltip> <span className={`text-[11px] font-medium ${gc ? "text-emerald-400" : dc ? "text-red-400" : "text-gray-500"}`}>{gc ? "Golden Cross ↑" : dc ? "Death Cross ↓" : ""}</span></div>
+                    <div className="flex gap-4">
+                      <div className="text-center"><Tooltip label="Relative Strength Index (14-day) — below 30 = oversold, above 70 = overbought" icon><span className="text-[11px] text-gray-500">RSI</span></Tooltip><div className={`text-sm font-medium ${(ti.rsi14 ?? 50) < 30 ? "text-emerald-400" : (ti.rsi14 ?? 50) > 70 ? "text-red-400" : "text-white"}`}>{(ti.rsi14 ?? 50).toFixed(0)}</div>{rsiLabel && <div className={`text-[10px] ${(ti.rsi14 ?? 50) < 30 ? "text-emerald-400" : "text-red-400"}`}>{rsiLabel}</div>}</div>
+                      <div className="text-center"><Tooltip label="Price vs 50-day moving average" icon><span className="text-[11px] text-gray-500">MA50</span></Tooltip><div className={`text-sm font-medium ${priceMa50 >= 0 ? "text-emerald-400" : "text-red-400"}`}>{Math.abs(priceMa50).toFixed(1)}%</div></div>
+                      <div className="text-center "><Tooltip label="Price vs 200-day moving average" icon><span className="text-[11px] text-gray-500">MA200</span></Tooltip><div className={`text-sm font-medium ${priceMa200 >= 0 ? "text-emerald-400" : "text-red-400"}`}>{ti.ma200 > 0 ? `${Math.abs(priceMa200).toFixed(1)}%` : "—"}</div></div>
+                      <div className="text-center "><Tooltip label="MACD histogram — bullish when rising, bearish when falling" icon><span className="text-[11px] text-gray-500">MACD</span></Tooltip><div className={`text-sm font-medium ${ti.macdHistogram > 0 ? "text-emerald-400" : ti.macdHistogram < 0 ? "text-red-400" : "text-gray-400"}`}>{ti.macdHistogram > 0 ? "+" : ""}{ti.macdHistogram.toFixed(2)}</div></div>
                     </div>
                   </div>
                   );
@@ -331,7 +300,7 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
       {(() => {
         const entryMap = new Map(entry?.analysis?.lots.map((a) => [a.lotId, a]) ?? []);
         return (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden mb-6">
+          <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-x-auto mb-6">
             <div className="px-4 py-3 border-b border-gray-800">
               <h3 className="font-medium text-white">Lots</h3>
             </div>
@@ -366,15 +335,12 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
                       <td className="px-3 py-2 text-right text-white font-medium">{fmt(lot.quantity * lot.price + lot.fees)}</td>
                       <td className="px-3 py-2 text-center">
                         {(() => {
-                          const entry = lotGrade(lot);
-                          const now = currentGrade(lot);
-                          if (!entry && !now) return <span className="text-gray-600">—</span>;
+                          const lg = lotGradeMap.get(lot.id);
+                          if (!lg) return <span className="text-gray-600">—</span>;
                           return (
-                            <div className="flex items-center justify-center gap-1">
-                              {entry && <span title={`Entry: ${gradeLabel(entry)}`} className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${gradeColor(entry)}`}>{entry}</span>}
-                              {entry && now && <span className="text-gray-600 text-[10px]">→</span>}
-                              {now && <span title={`Now: ${gradeLabel(now)}`} className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${gradeColor(now)}`}>{now}</span>}
-                            </div>
+                            <Tooltip label={lg.gradeExplanation}>
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded cursor-help ${gradeColor(lg.grade)}`}>{lg.grade}</span><span className="text-[10px] text-gray-600 ml-1">{lg.gradeScore.toFixed(0)}</span>
+                            </Tooltip>
                           );
                         })()}
                       </td>

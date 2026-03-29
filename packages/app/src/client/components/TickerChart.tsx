@@ -3,7 +3,7 @@ import { ResponsiveContainer, ComposedChart, Line, Bar, Area, XAxis, YAxis, Tool
 import { trpc } from "../trpc.js";
 import { fmtDate, fmtDateShort } from "../fmt.js";
 
-type Lot = { id: string; type: string; transactionDate: string; quantity: number; price: number; fees: number; notes: string };
+type Lot = { id: string; type: string; transactionDate: string; quantity: number; price: number; fees: number; notes: string; grade?: string; gradeScore?: number; gradeExplanation?: string };
 
 export function TickerChart({ symbol, lots, cutoffDate }: { symbol: string; lots: Lot[]; cutoffDate?: string }) {
   const { data: prices } = trpc.getTickerPrices.useQuery({ symbol, from: "2024-01-01" });
@@ -33,22 +33,7 @@ export function TickerChart({ symbol, lots, cutoffDate }: { symbol: string; lots
     const buyInfo = buyLots.length > 0 ? buyLots.map((l) => `${l.quantity}@$${l.price}`).join(", ") : null;
     const sellInfo = sellLots.length > 0 ? sellLots.map((l) => `${l.quantity}@$${l.price}`).join(", ") : null;
     const buyVsMa50 = buyLots.length > 0 && ma50AtDate ? ((buyLots[0].price - ma50AtDate) / ma50AtDate * 100) : null;
-    // Grade: crossover is primary factor, price vs MA50 is secondary
-    // Uptrend (golden cross): A = dip below MA50, B = near/above MA50
-    // No trend: C
-    // Downtrend (death cross): D = below MA50 (falling knife), F = above MA50 (chasing)
-    let buyGrade: string | null = null;
-    if (buyLots.length > 0 && ma50AtDate) {
-      const vsMa50 = buyVsMa50!;
-      const ma200v = ma200Map.get(p.date) ?? 0;
-      const goldenCross = ma50AtDate > ma200v && ma200v > 0;
-      const deathCross = ma50AtDate < ma200v && ma200v > 0;
-      if (goldenCross && vsMa50 < -2) buyGrade = "A";
-      else if (goldenCross) buyGrade = "B";
-      else if (deathCross && vsMa50 > 2) buyGrade = "F";
-      else if (deathCross) buyGrade = "D";
-      else buyGrade = "C";
-    }
+    const buyGrade = buyLots.length > 0 ? (buyLots[0].grade || null) : null;
     return {
       date: p.date,
       close: p.close,

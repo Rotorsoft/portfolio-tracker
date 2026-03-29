@@ -64,7 +64,7 @@ export function Shell() {
                   <path d="M6 22 L12 14 L17 18 L26 8 L26 22 Z" fill="#6366f1" fillOpacity="0.15"/>
                   <circle cx="26" cy="8" r="2" fill="#10b981"/>
                 </svg>
-                <h1 className="text-lg font-semibold tracking-tight text-white">
+                <h1 className="text-lg font-semibold tracking-tight text-white hidden sm:block">
                   Portfolio Tracker
                 </h1>
               </div>

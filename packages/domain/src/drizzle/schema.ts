@@ -51,6 +51,10 @@ export const positions = pgTable("positions", {
   maxDrawdown: real("max_drawdown").notNull().default(0),
   daysUnderwater: integer("days_underwater").notNull().default(0),
   yearlyRangePct: real("yearly_range_pct").notNull().default(50),
+  entryGrade: text("entry_grade").notNull().default("C"),
+  entryGradeScore: real("entry_grade_score").notNull().default(50),
+  rsiAtEntry: real("rsi_at_entry").notNull().default(50),
+  bollingerPctAtEntry: real("bollinger_pct_at_entry").notNull().default(50),
 });
 
 export const lots = pgTable("lots", {
@@ -64,6 +68,9 @@ export const lots = pgTable("lots", {
   price: real("price").notNull(),
   fees: real("fees").notNull().default(0),
   notes: text("notes").notNull().default(""),
+  grade: text("grade").notNull().default(""),
+  gradeScore: real("grade_score").notNull().default(0),
+  gradeExplanation: text("grade_explanation").notNull().default(""),
 });
 
 export const tickers = pgTable("tickers", {
@@ -82,6 +89,14 @@ export const tickers = pgTable("tickers", {
   yearlyHigh: real("yearly_high").notNull().default(0),
   yearlyLow: real("yearly_low").notNull().default(0),
   signal: text("signal").notNull().default("hold"),
+  compositeScore: real("composite_score").notNull().default(0),
+  rsi14: real("rsi_14").notNull().default(50),
+  macdLine: real("macd_line").notNull().default(0),
+  macdSignalLine: real("macd_signal_line").notNull().default(0),
+  macdHistogram: real("macd_histogram").notNull().default(0),
+  roc10: real("roc_10").notNull().default(0),
+  roc20: real("roc_20").notNull().default(0),
+  volumeRatio: real("volume_ratio").notNull().default(1),
 });
 
 export const tickerFundamentals = pgTable("ticker_fundamentals", {

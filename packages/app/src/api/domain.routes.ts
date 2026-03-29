@@ -14,6 +14,7 @@ import {
   backfillPrices,
   getTickerFundamentals,
   upsertTickerFundamentals,
+  recomputeIndicators,
 } from "@portfolio-tracker/domain";
 import { z } from "zod";
 import { t, authedProcedure, publicProcedure } from "./trpc.js";
@@ -165,6 +166,16 @@ export const domainRouter = t.router({
   getPriceDateRange: publicProcedure.query(async () => getPriceDateRange()),
 
   // === Backfill (direct DB write — no events) ===
+  recomputeAllIndicators: authedProcedure
+    .mutation(async () => {
+      const allTickers = await getTickers();
+      let count = 0;
+      for (const t of allTickers) {
+        await recomputeIndicators(t.symbol);
+        count++;
+      }
+      return { success: true, count };
+    }),
   requestBackfill: authedProcedure
     .input(z.object({ symbol: z.string(), fromDate: z.string(), toDate: z.string() }))
     .mutation(async ({ input }) => {
@@ -215,6 +226,7 @@ export const domainRouter = t.router({
         marketValue: number; unrealizedGL: number; unrealizedGLPercent: number; lots: number;
         positionId: string; timingScore: number; dcaSavingsPct: number; signal: string;
         maxDrawdown: number; daysUnderwater: number; yearlyRangePct: number; entryVsMa50: number;
+        compositeScore: number; rsi14: number; entryGrade: string; entryGradeScore: number;
       }> = [];
 
       for (const pos of positions) {
@@ -234,6 +246,8 @@ export const domainRouter = t.router({
           signal: tickerInfo?.signal ?? "hold", maxDrawdown: pos.maxDrawdown ?? 0,
           daysUnderwater: pos.daysUnderwater ?? 0, yearlyRangePct: pos.yearlyRangePct ?? 50,
           entryVsMa50: pos.entryVsMa50 ?? 0,
+          compositeScore: tickerInfo?.compositeScore ?? 0, rsi14: tickerInfo?.rsi14 ?? 50,
+          entryGrade: pos.entryGrade ?? "C", entryGradeScore: pos.entryGradeScore ?? 50,
         });
       }
       return {
@@ -292,9 +306,12 @@ export const domainRouter = t.router({
           date: lot.transactionDate,
           quantity: lot.quantity,
           entryPrice: lot.price,
-          vsAvg: vsAvg,
-          vsAvgPct: vsAvgPct,
+          vsAvg,
+          vsAvgPct,
           timingScore: lotTimingScore,
+          grade: lot.grade || "C",
+          gradeScore: lot.gradeScore || 0,
+          gradeExplanation: lot.gradeExplanation || "",
         };
       });
 

@@ -45,6 +45,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
 
   const getSortVal = (pos: any, col: string) => {
     if (col === "pe") return bulkFundamentals?.[pos.ticker]?.trailingPE ?? 0;
+    if (col === "entryGrade") return pos.entryGradeScore ?? 0;
     return pos[col] ?? 0;
   };
   const sortedPositions = [...(summary?.positions ?? [])].sort((a, b) => {
@@ -66,6 +67,8 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
   const cutoffDate = portfolio?.cutoffDate || "2024-01-01";
   const [backfillStatus, setBackfillStatus] = useState<Record<string, { loading: boolean; result?: string }>>({});
   const [backfillingAll, setBackfillingAll] = useState(false);
+  const [recomputing, setRecomputing] = useState(false);
+  const recomputeMutation = trpc.recomputeAllIndicators.useMutation();
   const [backfillFrom, setBackfillFrom] = useState<string | null>(null);
   const effectiveBackfillFrom = backfillFrom ?? cutoffDate;
 
@@ -156,7 +159,18 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
     for (const t of tickerList) await handleBackfill(t);
     setBackfillingAll(false);
   };
-  const anyLoading = backfillingAll || Object.values(backfillStatus).some((s) => s.loading);
+  const handleRecompute = async () => {
+    setRecomputing(true);
+    try {
+      await recomputeMutation.mutateAsync();
+      utils.getPortfolioSummary.invalidate();
+      utils.getTickers.invalidate();
+      utils.getPosition.invalidate();
+    } finally {
+      setRecomputing(false);
+    }
+  };
+  const anyLoading = backfillingAll || recomputing || Object.values(backfillStatus).some((s) => s.loading);
   const { data: allTickerData } = trpc.getTickers.useQuery();
   const { data: priceRange } = trpc.getPriceDateRange.useQuery();
   const recentCutoff = new Date(new Date(today).getTime() - 3 * 86400000).toISOString().split("T")[0];
@@ -193,7 +207,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
         <ArrowLeft size={14} /> Back to portfolios
       </button>
 
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <div className="flex items-center gap-4">
           <div>
             <h2 className="text-xl font-semibold text-white">{portfolio?.name}</h2>
@@ -220,7 +234,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
           ))}
         </nav>
         {summary && (
-          <div className="flex items-center gap-6 text-right">
+          <div className="hidden md:flex items-center gap-6 text-right">
             <div>
               <div className="text-[10px] text-gray-600 uppercase">Cost</div>
               <div className="text-sm font-semibold text-white">{fmt(summary.totalCost)}</div>
@@ -242,7 +256,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
       </div>
 
       {/* Tab actions */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <div />
         {subTab === "positions" && !showAdd && (
           <div className="flex gap-2">
@@ -251,13 +265,18 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
           </div>
         )}
         {subTab === "prices" && (
-          allFilled ? (
-            <span className="text-emerald-400 text-sm">&#10003; All filled</span>
-          ) : (
-            <button onClick={handleBackfillAll} disabled={anyLoading} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">
-              {backfillingAll ? "Backfilling..." : <><RefreshCw size={12} /> Backfill All</>}
+          <div className="flex gap-2 items-center">
+            {allFilled ? (
+              <span className="text-emerald-400 text-sm">&#10003; All filled</span>
+            ) : (
+              <button onClick={handleBackfillAll} disabled={anyLoading} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">
+                {backfillingAll ? "Backfilling..." : <><RefreshCw size={12} /> Backfill All</>}
+              </button>
+            )}
+            <button onClick={handleRecompute} disabled={recomputing} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">
+              {recomputing ? "Recomputing..." : <><RefreshCw size={12} /> Recompute Signals</>}
             </button>
-          )
+          </div>
         )}
       </div>
 
@@ -315,7 +334,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
             </form>
           )}
 
-          <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+          <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-800">
@@ -370,36 +389,55 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                       </div>
                     </InfoTip>
                   </th>
+                  <th onClick={() => toggleSort("entryGrade")}
+                    className="text-center px-3 py-2 text-xs text-gray-500 uppercase cursor-pointer hover:text-gray-300 select-none whitespace-nowrap">
+                    Grade{sortCol === "entryGrade" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+                    <InfoTip>
+                      <div className="space-y-1.5">
+                        <div className="text-gray-300 font-medium">Entry Grade</div>
+                        <div className="text-gray-400 text-[11px] leading-tight">Composite of RSI, Bollinger, MA trend, timing, and volume at entry</div>
+                        <table className="font-mono text-[11px]">
+                          <tbody>
+                            <tr><td className="text-emerald-400 pr-2">A</td><td>85+ — excellent entry</td></tr>
+                            <tr><td className="text-emerald-400 pr-2">B</td><td>70+ — good entry</td></tr>
+                            <tr><td className="text-amber-400 pr-2">C</td><td>55+ — average entry</td></tr>
+                            <tr><td className="text-red-400 pr-2">D</td><td>40+ — poor entry</td></tr>
+                            <tr><td className="text-red-400 pr-2">F</td><td>&lt;40 — bad entry</td></tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </InfoTip>
+                  </th>
                   <th onClick={() => toggleSort("signal")}
                     className="text-center px-3 py-2 text-xs text-gray-500 uppercase cursor-pointer hover:text-gray-300 select-none whitespace-nowrap">
                     Signal{sortCol === "signal" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
                     <InfoTip>
                       <div className="space-y-2">
-                        <div className="text-gray-300 font-medium">Trend Signal</div>
+                        <div className="text-gray-300 font-medium">Composite Signal</div>
                         <div className="text-gray-400 text-[11px] leading-tight">
-                          Combines 50-day and 200-day moving average crossover with current price position to gauge trend strength.
+                          Weighted composite of 6 indicators: RSI (20%), MACD (25%), Bollinger Bands (15%), MA trend (20%), momentum (10%), volume (10%).
                         </div>
                         <table className="text-[11px] w-full border-spacing-y-1" style={{ borderCollapse: "separate" }}>
                           <tbody>
                             <tr>
                               <td className="text-emerald-400 pr-3 font-bold whitespace-nowrap align-top">STRONG BUY</td>
-                              <td className="text-gray-300">Price pulled back &gt;2% below MA50 while MA50 &gt; MA200 (golden cross). Dip-buy opportunity in a confirmed uptrend.</td>
+                              <td className="text-gray-300">Composite score &ge; 1.2 — multiple indicators aligned bullish (oversold RSI, MACD crossover, golden cross, etc.)</td>
                             </tr>
                             <tr>
                               <td className="text-emerald-400 pr-3 font-bold whitespace-nowrap align-top">BUY</td>
-                              <td className="text-gray-300">MA50 &gt; MA200 (golden cross). Uptrend intact — price near or above the 50-day average.</td>
+                              <td className="text-gray-300">Score 0.4 to 1.2 — majority of indicators bullish</td>
                             </tr>
                             <tr>
                               <td className="text-gray-400 pr-3 font-bold whitespace-nowrap align-top">HOLD</td>
-                              <td className="text-gray-300">Moving averages are converging or there is not enough price history. No clear directional signal.</td>
+                              <td className="text-gray-300">Score -0.4 to 0.4 — mixed signals, no clear direction</td>
                             </tr>
                             <tr>
                               <td className="text-red-400 pr-3 font-bold whitespace-nowrap align-top">SELL</td>
-                              <td className="text-gray-300">MA50 &lt; MA200 (death cross). Downtrend confirmed — price near or below the 50-day average.</td>
+                              <td className="text-gray-300">Score -1.2 to -0.4 — majority of indicators bearish</td>
                             </tr>
                             <tr>
                               <td className="text-red-400 pr-3 font-bold whitespace-nowrap align-top">STRONG SELL</td>
-                              <td className="text-gray-300">Price rallied &gt;2% above MA50 while MA50 &lt; MA200 (death cross). Chasing a bear-market bounce.</td>
+                              <td className="text-gray-300">Score &le; -1.2 — multiple indicators aligned bearish (overbought RSI, MACD divergence, death cross, etc.)</td>
                             </tr>
                           </tbody>
                         </table>
@@ -436,6 +474,15 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                     </td>
                     <td className={`px-3 py-2 text-right text-xs font-medium ${pos.dcaSavingsPct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                       {Math.abs(pos.dcaSavingsPct).toFixed(1)}%
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
+                        pos.entryGrade === "A" ? "bg-emerald-500/20 text-emerald-400" :
+                        pos.entryGrade === "B" ? "bg-emerald-500/10 text-emerald-400" :
+                        pos.entryGrade === "C" ? "bg-amber-500/10 text-amber-400" :
+                        "bg-red-500/10 text-red-400"
+                      }`}>{pos.entryGrade}</span>
+                      <span className="text-[10px] text-gray-600 ml-1">{pos.entryGradeScore.toFixed(0)}</span>
                     </td>
                     <td className="px-3 py-2 text-center">
                       <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
@@ -519,7 +566,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
               </div>
             );
           })()}
-          <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+          <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-800">

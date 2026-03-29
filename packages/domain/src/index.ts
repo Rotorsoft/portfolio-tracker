@@ -30,6 +30,7 @@ export {
   backfillPrices,
   type TickerView,
   type PricePoint,
+  recomputeIndicators,
   getTickerFundamentals,
   upsertTickerFundamentals,
   type FundamentalsView,
@@ -45,4 +46,12 @@ export {
 export {
   maSeries,
   bollingerSeries,
+  computeCompositeSignal,
+  signalExplanation,
+  computeEntryGrade,
+  gradeExplanation,
+  type SignalComponents,
+  type EntryFactors,
+  type SignalType,
+  type EntryGrade,
 } from "./indicators.js";
