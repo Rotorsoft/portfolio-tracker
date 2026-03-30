@@ -4,7 +4,8 @@ import { Tooltip } from "../components/Tooltip.js";
 import { trpc } from "../trpc.js";
 import { TickerChart } from "../components/TickerChart.js";
 import { DateInput } from "../components/DateInput.js";
-import { fmtDate } from "../fmt.js";
+import { fmtDate, fmtUsd, fmtUsdAbs, fmtPctAbs, glColor } from "../fmt.js";
+import { getLiveAlerts, liveDayChange, livePositionGL, gradeColor } from "../live.js";
 
 type Props = { positionId: string; portfolioId: string; ticker: string; cutoffDate?: string; onBack: () => void };
 
@@ -13,6 +14,11 @@ type Props = { positionId: string; portfolioId: string; ticker: string; cutoffDa
 export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, onBack }: Props) {
   const { data: position } = trpc.getPosition.useQuery({ positionId });
   const { data: tickerInfo } = trpc.getTicker.useQuery({ symbol: ticker });
+  const { data: liveQuotes } = trpc.getQuotes.useQuery(
+    { symbols: [ticker] },
+    { refetchInterval: 300_000 }
+  );
+  const liveQuote = liveQuotes?.[ticker];
   const { data: entry } = trpc.getEntryAnalysis.useQuery({ positionId });
   const { data: fundamentals } = trpc.getFundamentals.useQuery({ symbol: ticker }, { staleTime: 5 * 60 * 1000 });
   const addMutation = trpc.addLot.useMutation();
@@ -104,8 +110,6 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
 
   if (!position) return <div className="text-gray-500">Loading...</div>;
 
-  const fmt = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
-  const glColor = (val: number) => val > 0 ? "text-emerald-400" : val < 0 ? "text-red-400" : "text-gray-500";
   const S = {
     title: "text-base font-semibold tracking-wide mb-1.5 text-center",
     row: "flex gap-4 justify-center",
@@ -117,12 +121,6 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
   // Lot grades come from server (entry?.analysis?.lots[].grade)
   const entryLots = entry?.analysis?.lots ?? [];
   const lotGradeMap = new Map(entryLots.map((l: any) => [l.lotId, l]));
-  const gradeColor = (g: string) =>
-    g === "A" ? "bg-emerald-500/20 text-emerald-400" :
-    g === "B" ? "bg-emerald-500/10 text-emerald-400" :
-    g === "C" ? "bg-amber-500/10 text-amber-400" :
-    g === "D" ? "bg-red-500/10 text-red-400" :
-    "bg-red-500/20 text-red-400";
 
   return (
     <div>
@@ -134,10 +132,8 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
         const shares = position.totalShares ?? 0;
         const cost = position.totalCost ?? 0;
         const avgCost = position.avgCostBasis ?? 0;
-        const currentPrice = tickerInfo?.lastClose ?? 0;
-        const marketValue = shares * currentPrice;
-        const unrealizedGL = marketValue - cost;
-        const glPct = cost > 0 ? (unrealizedGL / cost) * 100 : 0;
+        const currentPrice = liveQuote?.price ?? tickerInfo?.lastClose ?? 0;
+        const { mv: marketValue, gl: unrealizedGL, glPct } = livePositionGL(shares, avgCost, currentPrice);
 
         const a = entry?.analysis;
         const f = fundamentals;
@@ -160,10 +156,10 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
 
         // Group 1: Holdings — col1 = position, col2 = market
         const holdCol1: KV[] = [
-          { label: "Shares", value: `${shares.toLocaleString()} @ ${fmt(avgCost)}` },
-          { label: "Cost", value: fmt(cost) },
-          { label: "Value", value: currentPrice > 0 ? fmt(marketValue) : "—" },
-          { label: "G/L", value: currentPrice > 0 ? `${fmt(unrealizedGL)} (${Math.abs(glPct).toFixed(1)}%)` : "—", color: currentPrice > 0 ? glColor(unrealizedGL) : undefined },
+          { label: "Shares", value: `${shares.toLocaleString()} @ ${fmtUsd(avgCost)}` },
+          { label: "Cost", value: fmtUsd(cost) },
+          { label: "Value", value: currentPrice > 0 ? fmtUsd(marketValue) : "—" },
+          { label: "G/L", value: currentPrice > 0 ? `${fmtUsdAbs(unrealizedGL)} (${fmtPctAbs(glPct, 1)})` : "—", color: currentPrice > 0 ? glColor(unrealizedGL) : undefined },
         ];
         const holdCol2: KV[] = [];
         if (ti) {
@@ -190,7 +186,7 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
           analCol2.push({ label: "RSI (14)", value: `${(ti.rsi14 ?? 50).toFixed(0)}${rsiLabel ? ` ${rsiLabel}` : ""}`, color: (ti.rsi14 ?? 50) < 30 ? "text-emerald-400" : (ti.rsi14 ?? 50) > 70 ? "text-red-400" : undefined, tooltip: "Relative Strength Index — momentum oscillator over 14 trading days (industry standard). Below 30 = oversold (price dropped too fast, may bounce). Above 70 = overbought (price rose too fast, may pull back)." });
           analCol2.push({ label: "vs MA50", value: `${Math.abs(priceMa50).toFixed(1)}%`, color: priceMa50 >= 0 ? "text-emerald-400" : "text-red-400", tooltip: "Current price vs 50-day Simple Moving Average (short-term trend). Above = uptrend, below = downtrend. The 50-day MA smooths out daily noise to reveal the underlying direction." });
           analCol2.push({ label: "vs MA200", value: ti.ma200 > 0 ? `${Math.abs(priceMa200).toFixed(1)}%` : "—", color: priceMa200 >= 0 ? "text-emerald-400" : "text-red-400", tooltip: "Current price vs 200-day Simple Moving Average (long-term trend). Above = bull market, below = bear market. When MA50 crosses above MA200 = Golden Cross (bullish signal). Below = Death Cross (bearish)." });
-          analCol2.push({ label: "MACD", value: `${ti.macdHistogram > 0 ? "+" : ""}${ti.macdHistogram.toFixed(2)}`, color: ti.macdHistogram > 0 ? "text-emerald-400" : ti.macdHistogram < 0 ? "text-red-400" : "text-gray-400", tooltip: "Moving Average Convergence Divergence histogram (12/26/9 EMA). Measures the gap between the MACD line (EMA12 − EMA26) and its 9-period signal line. Positive = bullish momentum building. Negative = bearish. Zero crossing is a key buy/sell trigger." });
+          analCol2.push({ label: "MACD", value: `${Math.abs(ti.macdHistogram).toFixed(2)}`, color: ti.macdHistogram > 0 ? "text-emerald-400" : ti.macdHistogram < 0 ? "text-red-400" : "text-gray-400", tooltip: "Moving Average Convergence Divergence histogram (12/26/9 EMA). Measures the gap between the MACD line (EMA12 − EMA26) and its 9-period signal line. Positive = bullish momentum building. Negative = bearish. Zero crossing is a key buy/sell trigger." });
         }
 
         const KVRow = ({ kv }: { kv: KV }) => (
@@ -206,11 +202,12 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-baseline gap-3">
                 <h2 className="text-lg font-semibold text-white">{position.ticker}</h2>
-                {currentPrice > 0 && <span className="text-2xl font-bold text-white">{fmt(currentPrice)}</span>}
-                {currentPrice > 0 && (ti?.previousClose ?? 0) > 0 && (() => {
-                  const dayChange = currentPrice - ti!.previousClose;
-                  const dayPct = (dayChange / ti!.previousClose) * 100;
-                  return <span className={`text-sm font-medium ${glColor(dayChange)}`}>{dayChange >= 0 ? "+" : ""}{fmt(dayChange)} ({Math.abs(dayPct).toFixed(2)}%)</span>;
+                {currentPrice > 0 && <span className="text-2xl font-bold text-white">{fmtUsd(currentPrice)}</span>}
+                {(() => {
+                  const pc = liveQuote?.previousClose ?? ti?.previousClose ?? 0;
+                  if (currentPrice <= 0 || pc <= 0) return null;
+                  const day = liveDayChange(currentPrice, pc);
+                  return <span className={`text-sm font-medium ${glColor(day.chg)}`}>{fmtUsdAbs(day.chg)} ({fmtPctAbs(day.pct)})</span>;
                 })()}
               </div>
               <button onClick={() => setShowAdd(!showAdd)} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium transition-colors flex items-center gap-1">
@@ -284,7 +281,22 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
                       {crossLabel && <div className="w-6 flex items-center justify-center"><span className={`text-[8px] font-medium uppercase ${gc ? "text-emerald-400" : "text-red-400"}`} style={{ writingMode: "vertical-lr", transform: "rotate(180deg)" }}>{crossLabel}</span></div>}
                     </div>
                   </Tooltip>
-                  <div className="flex-1 px-3 py-1.5">{analCol2.map((kv, i) => <KVRow key={i} kv={kv} />)}</div>
+                  <div className="flex-1 px-3 py-1.5">
+                    {analCol2.map((kv, i) => <KVRow key={i} kv={kv} />)}
+                    {(() => {
+                      const alerts = getLiveAlerts(liveQuote?.price ?? 0, ti?.lastClose ?? 0, liveQuote?.previousClose ?? ti?.previousClose ?? 0, ti?.ma50 ?? 0, ti?.ma200 ?? 0);
+                      if (alerts.length === 0) return null;
+                      return (
+                        <div className="mt-1 border-t border-gray-800 pt-1">
+                          {alerts.map((a, i) => (
+                            <div key={i} className={`text-[10px] font-medium ${a.bullish ? "text-emerald-400" : "text-red-400"}`}>
+                              {a.bullish ? "▲" : "▼"} {a.text}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </div>
                 );
               })()}
@@ -391,8 +403,8 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
                       </td>
                       <td className="px-3 py-2 text-gray-300">{fmtDate(lot.transactionDate)}</td>
                       <td className="px-3 py-2 text-right text-gray-300">{lot.quantity}</td>
-                      <td className="px-3 py-2 text-right text-gray-300">{fmt(lot.price)}</td>
-                      <td className="px-3 py-2 text-right text-white font-medium">{fmt(lot.quantity * lot.price + lot.fees)}</td>
+                      <td className="px-3 py-2 text-right text-gray-300">{fmtUsd(lot.price)}</td>
+                      <td className="px-3 py-2 text-right text-white font-medium">{fmtUsd(lot.quantity * lot.price + lot.fees)}</td>
                       <td className="px-3 py-2 text-center">
                         {(() => {
                           const lg = lotGradeMap.get(lot.id);
@@ -405,7 +417,7 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
                         })()}
                       </td>
                       <td className={`px-3 py-2 text-right text-xs ${a ? glColor(-a.vsAvg) : "text-gray-600"}`}>
-                        {a ? `${a.vsAvg >= 0 ? "+" : ""}${a.vsAvgPct.toFixed(1)}%` : "—"}
+                        {a ? fmtPctAbs(a.vsAvgPct, 1) : "—"}
                       </td>
                       <td className="px-3 py-2">
                         {a ? (

@@ -19,7 +19,7 @@ import {
 import { z } from "zod";
 import { t, authedProcedure, publicProcedure } from "./trpc.js";
 import { doAction } from "./app.js";
-import { fetchPrices, fetchFundamentals } from "./price-service.js";
+import { fetchPrices, fetchFundamentals, fetchQuotes, getQuoteStats } from "./price-service.js";
 
 export const domainRouter = t.router({
   // === Portfolio CRUD ===
@@ -201,6 +201,14 @@ export const domainRouter = t.router({
       await backfillPrices(symbol, newPrices, fetched.meta);
       return { success: true, count: newPrices.length };
     }),
+
+  getQuotes: publicProcedure
+    .input(z.object({ symbols: z.array(z.string()) }))
+    .query(async ({ input }) => {
+      return fetchQuotes(input.symbols.map((s) => s.toUpperCase()));
+    }),
+
+  getQuoteStats: publicProcedure.query(() => getQuoteStats()),
 
   // === Analytics ===
   getChartOverlays: publicProcedure

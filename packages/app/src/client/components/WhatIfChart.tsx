@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { ResponsiveContainer, ComposedChart, Line, Area, XAxis, YAxis, Tooltip, CartesianGrid, Legend, ReferenceLine } from "recharts";
 import { trpc } from "../trpc.js";
 import { DateInput } from "./DateInput.js";
-import { fmtDate, fmtDateShort } from "../fmt.js";
+import { fmtDate, fmtDateShort, fmtUsd, fmtUsdAbs } from "../fmt.js";
 
 export function WhatIfChart({ portfolioId, cutoffDate, onSelectTicker }: { portfolioId: string; cutoffDate: string; onSelectTicker?: (ticker: string) => void }) {
   const [whatIfDate, setWhatIfDate] = useState(cutoffDate || "2024-01-02");
@@ -13,8 +13,7 @@ export function WhatIfChart({ portfolioId, cutoffDate, onSelectTicker }: { portf
     { enabled: !!whatIfDate && !isNaN(new Date(whatIfDate).getTime()) }
   );
 
-  const fmt = (n: number) => `$${(n / 1000).toFixed(1)}k`;
-  const fmtFull = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+  const fmtK = (n: number) => `$${(Math.abs(n) / 1000).toFixed(1)}k`;
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
@@ -43,22 +42,22 @@ export function WhatIfChart({ portfolioId, cutoffDate, onSelectTicker }: { portf
             <div className="flex flex-wrap gap-3 mb-3">
               <div className="bg-gray-800/50 rounded-lg p-3 border border-gray-700">
                 <div className="text-xs text-gray-500">Cost Basis</div>
-                <div className="text-sm font-semibold text-white">{fmtFull(totalActual)}</div>
+                <div className="text-sm font-semibold text-white">{fmtUsd(totalActual)}</div>
               </div>
               <div className="bg-gray-800/50 rounded-lg p-3 border border-gray-700">
                 <div className="text-xs text-gray-500">What-If Cost</div>
-                <div className="text-sm font-semibold text-white">{fmtFull(totalWhatIf)}</div>
+                <div className="text-sm font-semibold text-white">{fmtUsd(totalWhatIf)}</div>
               </div>
               <div className="bg-gray-800/50 rounded-lg p-3 border border-gray-700">
                 <div className="text-xs text-gray-500">Actual G/L</div>
                 <div className={`text-sm font-semibold ${actualGL >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                  {fmtFull(actualGL)} ({totalActual > 0 ? ((actualGL / totalActual) * 100).toFixed(1) : 0}%)
+                  {fmtUsdAbs(actualGL)} ({totalActual > 0 ? Math.abs((actualGL / totalActual) * 100).toFixed(1) : 0}%)
                 </div>
               </div>
               <div className="bg-gray-800/50 rounded-lg p-3 border border-gray-700">
                 <div className="text-xs text-gray-500">What-If G/L</div>
                 <div className={`text-sm font-semibold ${whatIfGL >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                  {fmtFull(whatIfGL)} ({totalWhatIf > 0 ? ((whatIfGL / totalWhatIf) * 100).toFixed(1) : 0}%)
+                  {fmtUsdAbs(whatIfGL)} ({totalWhatIf > 0 ? Math.abs((whatIfGL / totalWhatIf) * 100).toFixed(1) : 0}%)
                 </div>
               </div>
               <div className="bg-gray-800/50 rounded-lg p-3 border border-indigo-500/50">
@@ -67,7 +66,7 @@ export function WhatIfChart({ portfolioId, cutoffDate, onSelectTicker }: { portf
                   const advantage = actualGL - whatIfGL;
                   return (
                     <div className={`text-sm font-semibold ${advantage >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                      {advantage >= 0 ? "+" : ""}{fmtFull(advantage)}
+                      {fmtUsdAbs(advantage)}
                       <span className="text-xs ml-1">{advantage >= 0 ? "better" : "worse"}</span>
                     </div>
                   );
@@ -106,9 +105,9 @@ export function WhatIfChart({ portfolioId, cutoffDate, onSelectTicker }: { portf
                 tickFormatter={fmtDateShort}
                 interval="preserveStartEnd"
               />
-              <YAxis yAxisId="value" tick={{ fontSize: 11, fill: "#64748b" }} tickFormatter={fmt} />
+              <YAxis yAxisId="value" tick={{ fontSize: 11, fill: "#64748b" }} tickFormatter={fmtK} />
               <YAxis yAxisId="delta" orientation="right" tick={{ fontSize: 10, fill: "#475569" }}
-                tickFormatter={(v: number) => `${v >= 0 ? "+" : ""}${(v / 1000).toFixed(1)}k`} />
+                tickFormatter={(v: number) => `$${(Math.abs(v) / 1000).toFixed(1)}k`} />
               <Tooltip
                 contentStyle={{ backgroundColor: "#1e293b", border: "1px solid #334155", borderRadius: "8px", fontSize: "12px" }}
                 labelStyle={{ color: "#94a3b8" }}
@@ -179,12 +178,12 @@ export function WhatIfChart({ portfolioId, cutoffDate, onSelectTicker }: { portf
                   className={`border-b border-gray-800/50 ${onSelectTicker ? "cursor-pointer hover:bg-gray-800/30" : ""}`}>
                   <td className="px-3 py-2 font-medium text-white">{p.ticker}</td>
                   <td className="px-3 py-2 text-right text-gray-300">{p.actualShares}</td>
-                  <td className="px-3 py-2 text-right text-gray-300">{fmtFull(p.avgCost)}</td>
-                  <td className="px-3 py-2 text-right text-gray-300">{fmtFull(p.actualCost)}</td>
-                  <td className={`px-3 py-2 text-right ${p.avgWhatIf > p.avgCost ? "text-red-400" : p.avgWhatIf < p.avgCost ? "text-emerald-400" : "text-gray-300"}`}>{fmtFull(p.avgWhatIf)}</td>
-                  <td className={`px-3 py-2 text-right ${p.whatIfCost > p.actualCost ? "text-red-400" : p.whatIfCost < p.actualCost ? "text-emerald-400" : "text-gray-300"}`}>{fmtFull(p.whatIfCost)}</td>
+                  <td className="px-3 py-2 text-right text-gray-300">{fmtUsd(p.avgCost)}</td>
+                  <td className="px-3 py-2 text-right text-gray-300">{fmtUsd(p.actualCost)}</td>
+                  <td className={`px-3 py-2 text-right ${p.avgWhatIf > p.avgCost ? "text-red-400" : p.avgWhatIf < p.avgCost ? "text-emerald-400" : "text-gray-300"}`}>{fmtUsd(p.avgWhatIf)}</td>
+                  <td className={`px-3 py-2 text-right ${p.whatIfCost > p.actualCost ? "text-red-400" : p.whatIfCost < p.actualCost ? "text-emerald-400" : "text-gray-300"}`}>{fmtUsd(p.whatIfCost)}</td>
                   <td className={`px-3 py-2 text-right font-medium ${p.diff > 0 ? "text-red-400" : p.diff < 0 ? "text-emerald-400" : "text-gray-400"}`}>
-                    {fmtFull(Math.abs(p.diff))}
+                    {fmtUsdAbs(p.diff)}
                   </td>
                   <td className={`px-3 py-2 text-right font-medium ${p.diffPct > 0 ? "text-red-400" : p.diffPct < 0 ? "text-emerald-400" : "text-gray-400"}`}>
                     {Math.abs(p.diffPct).toFixed(1)}%

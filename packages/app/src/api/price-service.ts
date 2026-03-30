@@ -65,6 +65,65 @@ export async function fetchPrices(
   return { prices, meta };
 }
 
+/**
+ * Fetches real-time quotes for multiple symbols via Yahoo Finance v8 chart API.
+ * Cached for 60s per symbol to avoid hammering the API.
+ */
+const _quoteCache = new Map<string, { price: number; previousClose: number; ts: number }>();
+const QUOTE_TTL = 300_000; // 5min
+let _quoteRefreshCount = 0;
+let _lastQuoteRefreshTs = 0;
+
+/** Stats about quote fetching since server start */
+export function getQuoteStats() {
+  return { refreshCount: _quoteRefreshCount, lastRefreshTs: _lastQuoteRefreshTs };
+}
+
+export async function fetchQuotes(
+  symbols: string[]
+): Promise<Record<string, { price: number; previousClose: number }>> {
+  const now = Date.now();
+  const results: Record<string, { price: number; previousClose: number }> = {};
+  const stale: string[] = [];
+
+  for (const s of symbols) {
+    const cached = _quoteCache.get(s);
+    if (cached && now - cached.ts < QUOTE_TTL) {
+      results[s] = { price: cached.price, previousClose: cached.previousClose };
+    } else {
+      stale.push(s);
+    }
+  }
+
+  if (stale.length > 0) {
+    _quoteRefreshCount++;
+    _lastQuoteRefreshTs = now;
+    await Promise.all(
+      stale.map(async (symbol) => {
+        try {
+          const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d&includePrePost=false`;
+          const res = await fetch(url, {
+            headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
+          });
+          if (!res.ok) return;
+          const json = (await res.json()) as any;
+          const meta = json.chart?.result?.[0]?.meta;
+          if (!meta?.regularMarketPrice) return;
+          const entry = {
+            price: Math.round(meta.regularMarketPrice * 100) / 100,
+            previousClose: meta.chartPreviousClose ?? meta.previousClose ?? 0,
+            ts: now,
+          };
+          _quoteCache.set(symbol, entry);
+          results[symbol] = { price: entry.price, previousClose: entry.previousClose };
+        } catch {}
+      })
+    );
+  }
+
+  return results;
+}
+
 // Yahoo Finance crumb/cookie cache (needed for v10 API)
 let _yfCrumb: string | null = null;
 let _yfCookie: string | null = null;

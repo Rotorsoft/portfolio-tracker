@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ArrowLeft, Plus, X, RefreshCw, Trash2, Settings, LayoutList, BarChart3, Database } from "lucide-react";
 import { Tooltip } from "../components/Tooltip.js";
 import { trpc } from "../trpc.js";
@@ -7,7 +7,8 @@ import { PositionDetail } from "./PositionDetail.js";
 import { DateInput } from "../components/DateInput.js";
 import { WhatIfChart } from "../components/WhatIfChart.js";
 import { PortfolioSettings } from "../components/PortfolioSettings.js";
-import { fmtDate, fmtDateShort, fmtMonthYear } from "../fmt.js";
+import { fmtDate, fmtMonthYear, fmtUsd, fmtUsdAbs, fmtPctAbs, glColor } from "../fmt.js";
+import { getLivePrice, getLiveAlerts, livePortfolioTotals, livePositionGL, liveDayChange, volatilityColor, gradeColor, signalColor, fmtDividendYield, lastTradingDate, pendingBackfillTickers, isMarketOpen, marketCountdown, fmtCountdown } from "../live.js";
 import { InfoTip } from "../components/InfoTip.js";
 
 
@@ -44,6 +45,17 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
   };
 
   const { data: allTickerData } = trpc.getTickers.useQuery();
+  const tickerSymbols = positions?.map((p) => p.ticker).filter(Boolean) ?? [];
+  const { data: liveQuotes, dataUpdatedAt: quotesUpdatedAt } = trpc.getQuotes.useQuery(
+    { symbols: tickerSymbols },
+    { enabled: tickerSymbols.length > 0, refetchInterval: 300_000 }
+  );
+  const { data: quoteStats } = trpc.getQuoteStats.useQuery(undefined, { refetchInterval: 300_000 });
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
   const getSortVal = (pos: any, col: string) => {
     if (col === "pe") return bulkFundamentals?.[pos.ticker]?.trailingPE ?? 0;
     if (col === "yield") return bulkFundamentals?.[pos.ticker]?.dividendYield ?? 0;
@@ -166,36 +178,29 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
     utils.getPosition.invalidate();
     setBackfillingAll(false);
   };
-  const lastTradingDate = () => {
-    const now = new Date();
-    const d = new Date(now);
-    // If before market close (4pm ET / 20:00 UTC), use previous day
-    const utcHour = now.getUTCHours();
-    if (utcHour < 21) d.setDate(d.getDate() - 1); // market hasn't closed yet
-    // Skip weekends
-    const day = d.getDay();
-    if (day === 0) d.setDate(d.getDate() - 2); // Sunday → Friday
-    if (day === 6) d.setDate(d.getDate() - 1); // Saturday → Friday
-    return d.toISOString().split("T")[0];
-  };
-  const [refreshing, setRefreshing] = useState(false);
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    const date = lastTradingDate();
-    const tickerList = positions?.map((p) => p.ticker).filter(Boolean) ?? [];
-    for (const t of tickerList) {
-      try {
-        await backfillMutation.mutateAsync({ symbol: t, fromDate: date, toDate: date });
-      } catch {}
-    }
-    await recomputeMutation.mutateAsync();
-    utils.getTickers.invalidate();
-    utils.getTicker.invalidate();
-    utils.getPortfolioSummary.invalidate();
-    utils.getPosition.invalidate();
-    setRefreshing(false);
-  };
-  const anyLoading = backfillingAll || refreshing || Object.values(backfillStatus).some((s) => s.loading);
+  const [autoBackfilling, setAutoBackfilling] = useState(false);
+  const autoBackfillRan = useRef(false);
+  useEffect(() => {
+    if (autoBackfillRan.current || !allTickerData || !positions || positions.length === 0) return;
+    const pending = pendingBackfillTickers(allTickerData, positions.map((p) => p.ticker).filter(Boolean));
+    if (pending.length === 0) return;
+    autoBackfillRan.current = true;
+    (async () => {
+      setAutoBackfilling(true);
+      const target = lastTradingDate();
+      for (const t of pending) {
+        try { await backfillMutation.mutateAsync({ symbol: t, fromDate: target, toDate: target }); } catch {}
+      }
+      await recomputeMutation.mutateAsync();
+      utils.getTickers.invalidate();
+      utils.getTicker.invalidate();
+      utils.getQuotes.invalidate();
+      utils.getPortfolioSummary.invalidate();
+      utils.getPosition.invalidate();
+      setAutoBackfilling(false);
+    })();
+  }, [allTickerData, positions]);
+  const anyLoading = backfillingAll || autoBackfilling || Object.values(backfillStatus).some((s) => s.loading);
   const { data: priceRange } = trpc.getPriceDateRange.useQuery();
   const recentCutoff = new Date(new Date(today).getTime() - 3 * 86400000).toISOString().split("T")[0];
   const allFilled = positions && positions.length > 0 && positions.every((p) => {
@@ -215,9 +220,6 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
     );
   }
 
-  const glColor = (val: number) => val > 0 ? "text-emerald-400" : val < 0 ? "text-red-400" : "text-gray-500";
-  const fmt = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
-  const fmtPct = (n: number) => `${Math.abs(n).toFixed(2)}%`;
 
   const subTabs: { id: SubTab; label: string; icon: React.ReactNode }[] = [
     { id: "positions", label: "Positions", icon: <LayoutList size={14} /> },
@@ -257,26 +259,29 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
             </button>
           ))}
         </nav>
-        {summary && (
+        {summary && (() => {
+          const live = livePortfolioTotals(summary.positions, liveQuotes);
+          return (
           <div className="hidden md:flex items-center gap-6 text-right">
             <div>
-              <div className="text-[10px] text-gray-600 uppercase">Cost</div>
-              <div className="text-sm font-semibold text-white">{fmt(summary.totalCost)}</div>
+              <div className="text-sm text-gray-600 uppercase">Cost</div>
+              <div className="text-lg font-semibold text-white">{fmtUsd(summary.totalCost)}</div>
             </div>
             <div>
-              <div className="text-[10px] text-gray-600 uppercase">Value</div>
-              <div className="text-sm font-semibold text-white">{fmt(summary.totalMarketValue)}</div>
+              <div className="text-sm text-gray-600 uppercase">Value</div>
+              <div className="text-lg font-semibold text-white">{fmtUsd(live.totalValue)}</div>
             </div>
             <div>
-              <div className="text-[10px] text-gray-600 uppercase">G/L</div>
-              <div className={`text-sm font-semibold ${glColor(summary.totalUnrealizedGL)}`}>{fmt(summary.totalUnrealizedGL)}</div>
+              <div className="text-sm text-gray-600 uppercase">G/L</div>
+              <div className={`text-lg font-semibold ${glColor(live.gl)}`}>{fmtUsdAbs(live.gl)}</div>
             </div>
             <div>
-              <div className="text-[10px] text-gray-600 uppercase">Return</div>
-              <div className={`text-sm font-semibold ${glColor(summary.totalUnrealizedGLPercent)}`}>{fmtPct(summary.totalUnrealizedGLPercent)}</div>
+              <div className="text-sm text-gray-600 uppercase">Return</div>
+              <div className={`text-lg font-semibold ${glColor(live.glPct)}`}>{fmtPctAbs(live.glPct)}</div>
             </div>
           </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* Tab actions */}
@@ -297,9 +302,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                 {backfillingAll ? "Backfilling..." : <><RefreshCw size={12} /> Backfill All</>}
               </button>
             )}
-            <button onClick={handleRefresh} disabled={anyLoading || refreshing} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">
-              {refreshing ? "Refreshing..." : <><RefreshCw size={12} /> Refresh Today</>}
-            </button>
+            {autoBackfilling && <span className="text-[10px] text-gray-500 flex items-center gap-1"><RefreshCw size={10} className="animate-spin" /> Syncing daily prices...</span>}
           </div>
         )}
       </div>
@@ -359,7 +362,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
           )}
 
           <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-base">
               <thead>
                 <tr className="border-b border-gray-800">
                   {[
@@ -460,39 +463,33 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                     <td className="px-3 py-2">
                       <div className="flex items-baseline gap-1.5">
                         <span className="font-medium text-white">{pos.ticker}</span>
-                        {(() => { const pc = allTickerData?.find((t) => t.symbol === pos.ticker)?.previousClose ?? 0; if (pc <= 0) return null; const chg = pos.currentPrice - pc; const pct = (chg / pc) * 100; return <span className={`text-[10px] font-medium ${chg > 0 ? "text-emerald-400" : chg < 0 ? "text-red-400" : "text-gray-500"}`}>{chg >= 0 ? "+" : ""}{pct.toFixed(1)}%</span>; })()}
                       </div>
                       {pos.tickerName && <div className="text-[10px] text-gray-600 truncate max-w-[100px]">{pos.tickerName}</div>}
                     </td>
                     <td className="px-3 py-2 text-right text-gray-300">{pos.totalShares.toLocaleString()}</td>
-                    <td className="px-3 py-2 text-right text-gray-300">{fmt(pos.avgCostBasis)}</td>
-                    <td className="px-3 py-2 text-right text-gray-300">{fmt(pos.currentPrice)}</td>
-                    <td className="px-3 py-2 text-right text-gray-300">{fmt(pos.marketValue)}</td>
-                    <td className={`px-3 py-2 text-right font-medium ${glColor(pos.unrealizedGL)}`}>{fmt(pos.unrealizedGL)}</td>
-                    <td className={`px-3 py-2 text-right font-medium ${glColor(pos.unrealizedGLPercent)}`}>{fmtPct(pos.unrealizedGLPercent)}</td>
+                    <td className="px-3 py-2 text-right text-gray-300">{fmtUsd(pos.avgCostBasis)}</td>
+                    {(() => { const td = allTickerData?.find((t) => t.symbol === pos.ticker); const price = getLivePrice(liveQuotes, pos.ticker, pos.currentPrice); const pc = liveQuotes?.[pos.ticker]?.previousClose ?? td?.previousClose ?? 0; const day = liveDayChange(price, pc); const posGL = livePositionGL(pos.totalShares, pos.avgCostBasis, price); return <><td className={`px-3 py-2 text-right ${glColor(day.chg)}`}>{fmtUsd(price)}<div className="text-[10px]">{pc > 0 ? fmtPctAbs(day.pct, 1) : ""}</div></td><td className="px-3 py-2 text-right text-gray-300">{fmtUsd(posGL.mv)}</td><td className={`px-3 py-2 text-right font-medium ${glColor(posGL.gl)}`}>{fmtUsdAbs(posGL.gl)}</td><td className={`px-3 py-2 text-right font-medium ${glColor(posGL.glPct)}`}>{fmtPctAbs(posGL.glPct)}</td></>; })()}
                     <td className="px-3 py-2 text-right text-gray-500">{pos.lots}</td>
                     <td className="px-3 py-2 text-right text-gray-300">{bulkFundamentals?.[pos.ticker]?.trailingPE?.toFixed(1) ?? "—"}</td>
-                    <td className="px-3 py-2 text-right text-gray-300">{(() => { const dy = bulkFundamentals?.[pos.ticker]?.dividendYield; return dy != null ? `${(dy * 100).toFixed(2)}%` : "—"; })()}</td>
-                    {(() => { const v = allTickerData?.find((t) => t.symbol === pos.ticker)?.volatility30d ?? 0; return <td className={`px-3 py-2 text-right ${v > 30 ? "text-red-400" : v > 15 ? "text-amber-400" : "text-emerald-400"}`}>{v.toFixed(1)}%</td>; })()}
+                    <td className="px-3 py-2 text-right text-gray-300">{fmtDividendYield(bulkFundamentals?.[pos.ticker]?.dividendYield)}</td>
+                    {(() => { const v = allTickerData?.find((t) => t.symbol === pos.ticker)?.volatility30d ?? 0; return <td className={`px-3 py-2 text-right ${volatilityColor(v)}`}>{v.toFixed(1)}%</td>; })()}
                     <td className="px-3 py-2 text-center">
-                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
-                        pos.entryGrade === "A" ? "bg-emerald-500/20 text-emerald-400" :
-                        pos.entryGrade === "B" ? "bg-emerald-500/10 text-emerald-400" :
-                        pos.entryGrade === "C" ? "bg-amber-500/10 text-amber-400" :
-                        "bg-red-500/10 text-red-400"
-                      }`}>{pos.entryGrade}</span>
-                      <span className="text-[10px] text-gray-600 ml-1">{pos.entryGradeScore.toFixed(0)}</span>
+                      <span className={`px-1.5 py-0.5 rounded-full font-bold ${gradeColor(pos.entryGrade)}`}>{pos.entryGrade}</span>
+                      <div className="text-[10px] text-gray-600">{pos.entryGradeScore.toFixed(0)}</div>
                     </td>
+                    {(() => {
+                      const td = allTickerData?.find((t) => t.symbol === pos.ticker);
+                      const price = getLivePrice(liveQuotes, pos.ticker, pos.currentPrice);
+                      const pc = liveQuotes?.[pos.ticker]?.previousClose ?? td?.previousClose ?? 0;
+                      const alerts = getLiveAlerts(price, td?.lastClose ?? 0, pc, td?.ma50 ?? 0, td?.ma200 ?? 0);
+                      return (
                     <td className="px-3 py-2 text-center">
-                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
-                        pos.signal === "strong buy" ? "bg-emerald-500/20 text-emerald-400" :
-                        pos.signal === "buy" ? "bg-emerald-500/10 text-emerald-400" :
-                        pos.signal === "strong sell" ? "bg-red-500/20 text-red-400" :
-                        pos.signal === "sell" ? "bg-red-500/10 text-red-400" :
-                        "bg-gray-700 text-gray-400"
-                      }`}>{pos.signal?.toUpperCase()}</span>
-                      <span className="text-[10px] text-gray-600 ml-1">{pos.compositeScore.toFixed(2)}</span>
+                      <span className={`px-1.5 py-0.5 rounded-full font-medium ${signalColor(pos.signal)}`}>{pos.signal?.toUpperCase()}</span>
+                      <div className="text-[10px] text-gray-600">{pos.compositeScore.toFixed(2)}</div>
+                      {alerts.map((a, i) => <div key={i} className={`text-[10px] font-medium mt-0.5 ${a.bullish ? "text-emerald-400" : "text-red-400"}`}>{a.bullish ? "▲" : "▼"}{a.text.replace(/^(Up|Down) /, "")}</div>)}
                     </td>
+                      );
+                    })()}
                   </tr>
                 ))}
               </tbody>
@@ -513,6 +510,34 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
       {/* === Price Data Tab === */}
       {subTab === "prices" && (
         <div className="space-y-4">
+          {/* Live quote status */}
+          {(() => {
+            const target = lastTradingDate();
+            const marketOpen = isMarketOpen();
+            const refreshCount = quoteStats?.refreshCount ?? 0;
+            const nextUpdateIn = quotesUpdatedAt ? Math.max(0, 300_000 - (now - quotesUpdatedAt)) : 0;
+            const lastRefreshAgo = quoteStats?.lastRefreshTs ? now - quoteStats.lastRefreshTs : 0;
+            return (
+              <div className="rounded-xl border border-gray-800 bg-gray-900 px-4 py-3 flex items-center">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="text-sm text-white font-medium">Live Quotes</span>
+                  <span className="text-xs text-gray-500">every 5 min · next in {fmtCountdown(nextUpdateIn)}</span>
+                </div>
+                <div className="flex items-center gap-5 text-xs ml-6">
+                  <div><span className="text-gray-500">Refreshes</span> <span className="text-white font-medium ml-1">{refreshCount}</span></div>
+                  {lastRefreshAgo > 0 && <div><span className="text-gray-500">Last</span> <span className="text-white font-medium ml-1">{fmtCountdown(lastRefreshAgo)} ago</span></div>}
+                  {autoBackfilling && <span className="flex items-center gap-1 text-amber-400"><RefreshCw size={10} className="animate-spin" /> Syncing...</span>}
+                </div>
+                {(() => { const mc = marketCountdown(); return (
+                <div className="ml-auto flex items-center gap-5 text-xs">
+                  <span className={marketOpen ? "text-emerald-400" : "text-gray-500"}>{marketOpen ? "Market open" : "Market closed"} · {mc.label} {fmtCountdown(mc.ms)}</span>
+                  <span><span className="text-gray-500">Last Close</span> <span className="text-white font-medium ml-1">{fmtDate(target)}</span></span>
+                </div>
+                ); })()}
+              </div>
+            );
+          })()}
           {(() => {
             const minDate = new Date(new Date(cutoffDate).getTime() - 365 * 86400000);
             const maxDate = new Date(today);

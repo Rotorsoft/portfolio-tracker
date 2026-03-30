@@ -105,7 +105,7 @@ export function TickerChart({ symbol, lots, cutoffDate }: { symbol: string; lots
                         )}
                       </div>
                       {d._buyVsMa50 && <div className={`text-[10px] ${Number(d._buyVsMa50) > 0 ? "text-red-400" : "text-emerald-400"}`}>
-                        {Number(d._buyVsMa50) > 0 ? "+" : ""}{d._buyVsMa50}% vs MA50
+                        {Math.abs(Number(d._buyVsMa50)).toFixed(1)}% vs MA50
                       </div>}
                       {d._buyGrade && <div className="text-[10px] text-gray-500">
                         {d._buyGrade === "A" ? "Dip buy in uptrend" :
