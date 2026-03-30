@@ -43,6 +43,7 @@ export const domainRouter = t.router({
       description: z.string().optional(),
       currency: z.string().optional(),
       cutoffDate: z.string().optional(),
+      dipThreshold: z.number().min(0).max(50).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const { id, ...data } = input;
@@ -231,7 +232,7 @@ export const domainRouter = t.router({
       let totalMarketValue = 0;
       const tickerSummaries: Array<{
         ticker: string; tickerName: string; totalShares: number; avgCostBasis: number; currentPrice: number;
-        marketValue: number; unrealizedGL: number; unrealizedGLPercent: number; lots: number;
+        marketValue: number; unrealizedGL: number; unrealizedGLPercent: number; lots: number; lastBuyPrice: number;
         positionId: string; timingScore: number; dcaSavingsPct: number; signal: string;
         maxDrawdown: number; daysUnderwater: number; yearlyRangePct: number; entryVsMa50: number;
         compositeScore: number; rsi14: number; entryGrade: string; entryGradeScore: number;
@@ -247,9 +248,11 @@ export const domainRouter = t.router({
         const unrealizedGLPercent = cost > 0 ? (unrealizedGL / cost) * 100 : 0;
         totalCost += cost;
         totalMarketValue += marketValue;
+        const lastBuyPrice = (pos.lots ?? []).filter((l: any) => l.type === "buy")
+          .sort((a: any, b: any) => b.transactionDate.localeCompare(a.transactionDate))[0]?.price ?? 0;
         tickerSummaries.push({
           ticker: pos.ticker, tickerName: tickerInfo?.name ?? "", totalShares: pos.totalShares ?? 0, avgCostBasis: pos.avgCostBasis ?? 0,
-          currentPrice, marketValue, unrealizedGL, unrealizedGLPercent, lots: pos.lots?.length ?? 0,
+          currentPrice, marketValue, unrealizedGL, unrealizedGLPercent, lots: pos.lots?.length ?? 0, lastBuyPrice,
           positionId: pos.id, timingScore: pos.timingScore ?? 50, dcaSavingsPct: pos.dcaSavingsPct ?? 0,
           signal: tickerInfo?.signal ?? "hold", maxDrawdown: pos.maxDrawdown ?? 0,
           daysUnderwater: pos.daysUnderwater ?? 0, yearlyRangePct: pos.yearlyRangePct ?? 50,

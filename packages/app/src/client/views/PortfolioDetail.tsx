@@ -8,7 +8,7 @@ import { DateInput } from "../components/DateInput.js";
 import { WhatIfChart } from "../components/WhatIfChart.js";
 import { PortfolioSettings } from "../components/PortfolioSettings.js";
 import { fmtDate, fmtMonthYear, fmtUsd, fmtUsdAbs, fmtPctAbs, glColor } from "../fmt.js";
-import { getLivePrice, getLiveAlerts, livePortfolioTotals, livePortfolioDayChange, livePositionGL, liveDayChange, volatilityColor, gradeColor, signalColor, fmtDividendYield, lastTradingDate, pendingBackfillTickers, isMarketOpen, marketCountdown, fmtCountdown } from "../live.js";
+import { getLivePrice, getLiveAlerts, livePortfolioTotals, livePortfolioDayChange, livePositionGL, liveDayChange, avgDownOpportunity, avgDownColor, volatilityColor, gradeColor, signalColor, fmtDividendYield, lastTradingDate, pendingBackfillTickers, isMarketOpen, marketCountdown, fmtCountdown } from "../live.js";
 import { InfoTip } from "../components/InfoTip.js";
 
 
@@ -216,7 +216,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
     if (!pos) return <div className="text-gray-500">Loading...</div>;
     return (
       <PositionDetail positionId={pos.id} portfolioId={portfolioId} ticker={route.ticker} cutoffDate={cutoffDate}
-        onBack={() => nav.toPortfolio(portfolioId)} />
+        dipThreshold={portfolio?.dipThreshold ?? 5} onBack={() => nav.toPortfolio(portfolioId)} />
     );
   }
 
@@ -300,7 +300,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
             <div>
               <div className="text-sm text-gray-600 uppercase">Value</div>
               <div className="text-lg font-semibold text-white">{fmtUsd(live.totalValue)}</div>
-              <div className={`text-[10px] ${glColor(day.chg)}`}>{fmtUsdAbs(day.chg)} ({fmtPctAbs(day.pct, 1)})</div>
+              <div className={`text-[10px] ${glColor(day.chg)}`}>{fmtUsdAbs(day.chg)} ({fmtPctAbs(day.pct)})</div>
             </div>
             <div>
               <div className="text-sm text-gray-600 uppercase">G/L</div>
@@ -481,10 +481,11 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                         <span className="font-medium text-white">{pos.ticker}</span>
                       </div>
                       {pos.tickerName && <div className="text-[10px] text-gray-600 truncate max-w-[100px]">{pos.tickerName}</div>}
+                      {(() => { const lp = getLivePrice(liveQuotes, pos.ticker, pos.currentPrice); const opp = avgDownOpportunity(pos.lastBuyPrice, lp, pos.avgCostBasis, pos.totalShares); const color = opp ? avgDownColor(opp.gapPct, portfolio?.dipThreshold ?? 5) : ""; return opp && color ? <div className={`text-[10px] font-medium ${color}`}>▼ {fmtPctAbs(opp.gapPct)} below last buy</div> : null; })()}
                     </td>
                     <td className="px-3 py-2 text-right text-gray-300">{pos.totalShares.toLocaleString()}</td>
                     <td className="px-3 py-2 text-right text-gray-300">{fmtUsd(pos.avgCostBasis)}</td>
-                    {(() => { const td = allTickerData?.find((t) => t.symbol === pos.ticker); const price = getLivePrice(liveQuotes, pos.ticker, pos.currentPrice); const pc = liveQuotes?.[pos.ticker]?.previousClose ?? td?.previousClose ?? 0; const day = liveDayChange(price, pc); const posGL = livePositionGL(pos.totalShares, pos.avgCostBasis, price); return <><td className={`px-3 py-2 text-right ${glColor(day.chg)}`}>{fmtUsd(price)}<div className="text-[10px]">{pc > 0 ? fmtPctAbs(day.pct, 1) : ""}</div></td><td className="px-3 py-2 text-right text-gray-300">{fmtUsd(posGL.mv)}</td><td className={`px-3 py-2 text-right font-medium ${glColor(posGL.gl)}`}>{fmtUsdAbs(posGL.gl)}</td><td className={`px-3 py-2 text-right font-medium ${glColor(posGL.glPct)}`}>{fmtPctAbs(posGL.glPct)}</td></>; })()}
+                    {(() => { const td = allTickerData?.find((t) => t.symbol === pos.ticker); const price = getLivePrice(liveQuotes, pos.ticker, pos.currentPrice); const pc = liveQuotes?.[pos.ticker]?.previousClose ?? td?.previousClose ?? 0; const day = liveDayChange(price, pc); const posGL = livePositionGL(pos.totalShares, pos.avgCostBasis, price); return <><td className={`px-3 py-2 text-right ${glColor(day.chg)}`}>{fmtUsd(price)}<div className="text-[10px]">{pc > 0 ? fmtPctAbs(day.pct) : ""}</div></td><td className="px-3 py-2 text-right text-gray-300">{fmtUsd(posGL.mv)}</td><td className={`px-3 py-2 text-right font-medium ${glColor(posGL.gl)}`}>{fmtUsdAbs(posGL.gl)}</td><td className={`px-3 py-2 text-right font-medium ${glColor(posGL.glPct)}`}>{fmtPctAbs(posGL.glPct)}</td></>; })()}
                     <td className="px-3 py-2 text-right text-gray-500">{pos.lots}</td>
                     <td className="px-3 py-2 text-right text-gray-300">{bulkFundamentals?.[pos.ticker]?.trailingPE?.toFixed(1) ?? "—"}</td>
                     <td className="px-3 py-2 text-right text-gray-300">{fmtDividendYield(bulkFundamentals?.[pos.ticker]?.dividendYield)}</td>
@@ -675,6 +676,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
           description={portfolio.description}
           currency={portfolio.currency}
           cutoffDate={portfolio.cutoffDate ?? ""}
+          dipThreshold={portfolio.dipThreshold ?? 5}
           onClose={() => setShowSettings(false)}
         />
       )}

@@ -84,6 +84,7 @@ export const UpdatePortfolio = z.object({
   description: z.string().optional(),
   currency: z.string().optional(),
   cutoffDate: z.iso.date().optional(),
+  dipThreshold: z.number().min(0).max(50).optional(),
 });
 export const ArchivePortfolio = ZodEmpty;
 
@@ -116,6 +117,7 @@ export const PortfolioUpdated = z.object({
   description: z.string().optional(),
   currency: z.string().optional(),
   cutoffDate: z.iso.date().optional(),
+  dipThreshold: z.number().optional(),
 });
 export const PortfolioArchived = ZodEmpty;
 export const PositionOpened = z.object({

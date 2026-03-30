@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   getLiveAlerts, getLivePrice, livePortfolioTotals, livePortfolioDayChange,
-  livePositionGL, liveDayChange, volatilityColor, gradeColor, signalColor,
+  livePositionGL, liveDayChange, lastBuyPrice, avgDownOpportunity, avgDownColor, volatilityColor, gradeColor, signalColor,
   fmtDividendYield, lastTradingDate, pendingBackfillTickers, isMarketOpen,
   marketCountdown, fmtCountdown,
 } from "../src/client/live.js";
@@ -116,6 +116,52 @@ describe("livePortfolioDayChange", () => {
   });
 });
 
+describe("lastBuyPrice", () => {
+  it("returns price of most recent buy lot", () => {
+    expect(lastBuyPrice([
+      { type: "buy", transactionDate: "2024-01-15", price: 100 },
+      { type: "buy", transactionDate: "2024-06-01", price: 120 },
+      { type: "sell", transactionDate: "2024-07-01", price: 130 },
+    ])).toBe(120);
+  });
+
+  it("returns 0 for no buy lots", () => {
+    expect(lastBuyPrice([{ type: "sell", transactionDate: "2024-01-01", price: 50 }])).toBe(0);
+    expect(lastBuyPrice([])).toBe(0);
+  });
+});
+
+describe("avgDownOpportunity", () => {
+  it("returns opportunity with scenarios when price is below last buy", () => {
+    const result = avgDownOpportunity(100, 80, 90, 100);
+    expect(result).not.toBeNull();
+    expect(result!.gapPct).toBeCloseTo(-20);
+    expect(result!.scenarios).toHaveLength(3);
+    // 25% scenario: buy 25 more at 80
+    expect(result!.scenarios[0].addShares).toBe(25);
+    expect(result!.scenarios[0].newAvg).toBeCloseTo((90 * 100 + 80 * 25) / 125);
+    // 50% scenario: buy 50 more at 80
+    expect(result!.scenarios[1].addShares).toBe(50);
+    // 100% scenario: buy 100 more at 80
+    expect(result!.scenarios[2].addShares).toBe(100);
+    expect(result!.scenarios[2].newAvg).toBeCloseTo(85);
+    expect(result!.scenarios[2].costReduction).toBeGreaterThan(0);
+  });
+
+  it("returns null when price is above last buy", () => {
+    expect(avgDownOpportunity(100, 110, 90, 50)).toBeNull();
+  });
+
+  it("returns null when price equals last buy", () => {
+    expect(avgDownOpportunity(100, 100, 90, 50)).toBeNull();
+  });
+
+  it("returns null for zero inputs", () => {
+    expect(avgDownOpportunity(0, 80, 90, 50)).toBeNull();
+    expect(avgDownOpportunity(100, 0, 90, 50)).toBeNull();
+  });
+});
+
 describe("livePositionGL", () => {
   it("computes market value, gl, glPct", () => {
     const result = livePositionGL(100, 50, 75);
@@ -141,6 +187,31 @@ describe("liveDayChange", () => {
   it("returns zero for invalid inputs", () => {
     expect(liveDayChange(0, 100)).toEqual({ chg: 0, pct: 0 });
     expect(liveDayChange(100, 0)).toEqual({ chg: 0, pct: 0 });
+  });
+});
+
+describe("avgDownColor", () => {
+  it("returns green for big dip (>= 2x threshold)", () => {
+    expect(avgDownColor(-10, 5)).toContain("green-300");
+  });
+
+  it("returns emerald for moderate dip (>= 1x threshold)", () => {
+    expect(avgDownColor(-6, 5)).toContain("amber-400");
+  });
+
+  it("returns gray for small dip (>= 0.5x threshold)", () => {
+    expect(avgDownColor(-3, 5)).toContain("gray");
+  });
+
+  it("returns empty for tiny dip (< 0.5x threshold)", () => {
+    expect(avgDownColor(-1, 5)).toBe("");
+  });
+
+  it("uses custom threshold", () => {
+    expect(avgDownColor(-4, 2)).toContain("green-300"); // 4 >= 2*2
+    expect(avgDownColor(-3, 2)).toContain("amber-400"); // 3 >= 2
+    expect(avgDownColor(-1, 2)).toContain("gray"); // 1 >= 0.5*2
+    expect(avgDownColor(-0.5, 2)).toBe(""); // 0.5 < 0.5*2
   });
 });
 

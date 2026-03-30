@@ -126,6 +126,58 @@ export function signalColor(signal: string | undefined) {
     "bg-gray-700 text-gray-400";
 }
 
+/** Get the price of the most recent buy lot */
+export function lastBuyPrice(lots: { type: string; transactionDate: string; price: number }[]): number {
+  const buys = lots.filter((l) => l.type === "buy");
+  if (buys.length === 0) return 0;
+  return buys.sort((a, b) => b.transactionDate.localeCompare(a.transactionDate))[0].price;
+}
+
+/** Avg down scenario for a given number of additional shares */
+export type AvgDownScenario = {
+  addShares: number;
+  addCost: number;
+  newAvg: number;
+  costReduction: number;
+  newTotal: number;
+};
+
+/** Avg down opportunity: gap below last buy price with multiple scenarios */
+export function avgDownOpportunity(
+  lastBuyPrice: number,
+  livePrice: number,
+  avgCost: number,
+  shares: number
+) {
+  if (lastBuyPrice <= 0 || livePrice <= 0 || livePrice >= lastBuyPrice) return null;
+  const gapPct = ((livePrice - lastBuyPrice) / lastBuyPrice) * 100;
+
+  const scenario = (addShares: number): AvgDownScenario => {
+    const totalCost = avgCost * shares + livePrice * addShares;
+    const totalShares = shares + addShares;
+    const newAvg = totalShares > 0 ? totalCost / totalShares : 0;
+    const costReduction = avgCost > 0 ? ((avgCost - newAvg) / avgCost) * 100 : 0;
+    return { addShares, addCost: livePrice * addShares, newAvg, costReduction, newTotal: totalShares };
+  };
+
+  const scenarios = [
+    scenario(Math.ceil(shares * 0.25)),
+    scenario(Math.ceil(shares * 0.5)),
+    scenario(shares),
+  ];
+
+  return { gapPct, scenarios };
+}
+
+/** Color for avg down opportunity — bigger dip = better timing = more green */
+export function avgDownColor(gapPct: number, threshold = 5): string {
+  const drop = Math.abs(gapPct);
+  if (drop >= threshold * 2) return "text-green-300 font-bold";
+  if (drop >= threshold) return "text-amber-400";
+  if (drop >= threshold * 0.5) return "text-gray-500";
+  return "";
+}
+
 /** Format dividend yield */
 export function fmtDividendYield(dy: number | null | undefined) {
   return dy != null ? `${(dy * 100).toFixed(2)}%` : "—";

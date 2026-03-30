@@ -62,6 +62,7 @@ export const Portfolio = state({ Portfolio: PortfolioState })
       ...(data.description !== undefined ? { description: data.description } : {}),
       ...(data.currency !== undefined ? { currency: data.currency } : {}),
       ...(data.cutoffDate !== undefined ? { cutoffDate: data.cutoffDate } : {}),
+      ...(data.dipThreshold !== undefined ? { dipThreshold: data.dipThreshold } : {}),
     }),
     PortfolioArchived: () => ({
       status: "archived",
@@ -262,6 +263,7 @@ export const PortfolioProjection = projection("portfolios")
     if (data.description !== undefined) updates.description = str(data.description);
     if (data.currency !== undefined) updates.currency = str(data.currency);
     if (data.cutoffDate !== undefined) updates.cutoffDate = str(data.cutoffDate);
+    if (data.dipThreshold !== undefined) updates.dipThreshold = data.dipThreshold;
     await db().update(portfolios).set(updates).where(eq(portfolios.id, stream));
   })
   .on({ PortfolioArchived })
