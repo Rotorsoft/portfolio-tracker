@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { ArrowLeft, Plus, X, RefreshCw, Trash2, Settings, LayoutList, BarChart3, Database, ExternalLink } from "lucide-react";
+import { Plus, X, RefreshCw, Trash2, Settings, LayoutList, BarChart3, Database, ExternalLink } from "lucide-react";
+import { BackButton } from "../components/BackButton.js";
 import { Tooltip } from "../components/Tooltip.js";
 import { trpc } from "../trpc.js";
 import { useNav, type SubTab } from "../hooks/useNav.js";
@@ -8,7 +9,7 @@ import { DateInput } from "../components/DateInput.js";
 import { WhatIfChart } from "../components/WhatIfChart.js";
 import { PortfolioSettings } from "../components/PortfolioSettings.js";
 import { fmtDate, fmtMonthYear, fmtUsd, fmtUsdAbs, fmtPctAbs, glColor } from "../fmt.js";
-import { getLivePrice, getLiveAlerts, livePortfolioTotals, livePortfolioDayChange, livePositionGL, liveDayChange, avgDownOpportunity, avgDownColor, volatilityColor, gradeColor, signalColor, fmtDividendYield, lastTradingDate, pendingBackfillTickers, isMarketOpen, marketCountdown, fmtCountdown } from "../live.js";
+import { getLivePrice, getLiveAlerts, livePortfolioTotals, livePortfolioDayChange, livePositionGL, liveDayChange, avgDownOpportunity, avgDownColor, volatilityColor, gradeColor, signalColor, fmtDividendYield, lastTradingDate, pendingBackfillTickers, isMarketOpen, shouldPollQuotes, marketCountdown, fmtCountdown } from "../live.js";
 import { InfoTip } from "../components/InfoTip.js";
 
 
@@ -46,16 +47,17 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
 
   const { data: allTickerData } = trpc.getTickers.useQuery();
   const tickerSymbols = positions?.map((p) => p.ticker).filter(Boolean) ?? [];
-  const { data: liveQuotes, dataUpdatedAt: quotesUpdatedAt } = trpc.getQuotes.useQuery(
-    { symbols: tickerSymbols },
-    { enabled: tickerSymbols.length > 0, refetchInterval: 300_000 }
-  );
-  const { data: quoteStats } = trpc.getQuoteStats.useQuery(undefined, { refetchInterval: 300_000 });
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
+  const polling = shouldPollQuotes();
+  const { data: liveQuotes, dataUpdatedAt: quotesUpdatedAt } = trpc.getQuotes.useQuery(
+    { symbols: tickerSymbols },
+    { enabled: tickerSymbols.length > 0, refetchInterval: polling ? 300_000 : false }
+  );
+  const { data: quoteStats } = trpc.getQuoteStats.useQuery(undefined, { refetchInterval: polling ? 300_000 : false });
   const getSortVal = (pos: any, col: string) => {
     if (col === "pe") return bulkFundamentals?.[pos.ticker]?.trailingPE ?? 0;
     if (col === "yield") return bulkFundamentals?.[pos.ticker]?.dividendYield ?? 0;
@@ -211,68 +213,84 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
     return (t?.priceCount ?? 0) > 0 && coversStart && coversEnd;
   });
 
-  if (route.page === "position" && route.portfolioId === portfolioId) {
-    const pos = positions?.find((p) => p.ticker === route.ticker);
-    if (!pos) return <div className="text-gray-500">Loading...</div>;
-    return (
-      <PositionDetail positionId={pos.id} portfolioId={portfolioId} ticker={route.ticker} cutoffDate={cutoffDate}
-        dipThreshold={portfolio?.dipThreshold ?? 5} onBack={() => nav.toPortfolio(portfolioId)} />
-    );
-  }
-
-
   const subTabs: { id: SubTab; label: string; icon: React.ReactNode }[] = [
     { id: "positions", label: "Positions", icon: <LayoutList size={14} /> },
     { id: "analysis", label: "Analysis", icon: <BarChart3 size={14} /> },
     { id: "prices", label: "Price Data", icon: <Database size={14} /> },
   ];
 
+  const livePanel = (() => {
+    const target = lastTradingDate();
+    const marketOpen = isMarketOpen();
+    const refreshCount = quoteStats?.refreshCount ?? 0;
+    const nextUpdateIn = quotesUpdatedAt ? Math.max(0, 300_000 - (now - quotesUpdatedAt)) : 0;
+    const lastRefreshAgo = quoteStats?.lastRefreshTs ? now - quoteStats.lastRefreshTs : 0;
+    const mc = marketCountdown();
+    return (
+      <div className="flex items-center gap-2 text-[10px]">
+        <div className={`w-1.5 h-1.5 rounded-full ${marketOpen ? "bg-emerald-400 animate-pulse" : "bg-gray-600"}`} />
+        {marketOpen ? (
+          <>
+            <span className="text-gray-300 font-medium">Live</span>
+            <span className="text-gray-600">every 5 min · next in {fmtCountdown(nextUpdateIn)}</span>
+            <div className="flex items-center gap-3 ml-2">
+              <div><span className="text-gray-600">Refreshes</span> <span className="text-gray-300 ml-0.5">{refreshCount}</span></div>
+              {lastRefreshAgo > 0 && <div><span className="text-gray-600">Last</span> <span className="text-gray-300 ml-0.5">{fmtCountdown(lastRefreshAgo)} ago</span></div>}
+              {autoBackfilling && <span className="flex items-center gap-0.5 text-amber-400"><RefreshCw size={8} className="animate-spin" /> Syncing...</span>}
+            </div>
+            <span className="text-emerald-400 ml-2">Market open · {mc.label} {fmtCountdown(mc.ms)}</span>
+          </>
+        ) : (
+          <>
+            <span className="text-gray-600">Market closed · {mc.label} {fmtCountdown(mc.ms)}</span>
+            <span className="text-gray-600 ml-2">Last Close {fmtDate(target)}</span>
+            {polling && <span className="text-gray-600 ml-2">settling...</span>}
+          </>
+        )}
+      </div>
+    );
+  })();
+
+  if (route.page === "position" && route.portfolioId === portfolioId) {
+    const pos = positions?.find((p) => p.ticker === route.ticker);
+    if (!pos) return <div className="text-gray-500">Loading...</div>;
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <BackButton label={`Back to ${portfolio?.name ?? "portfolio"}`} onClick={() => nav.toPortfolio(portfolioId)} />
+          {livePanel}
+        </div>
+        <PositionDetail positionId={pos.id} portfolioId={portfolioId} ticker={route.ticker} cutoffDate={cutoffDate}
+          dipThreshold={portfolio?.dipThreshold ?? 5} />
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-300 flex items-center gap-1">
-          <ArrowLeft size={14} /> Back to portfolios
-        </button>
-        {(() => {
-          const target = lastTradingDate();
-          const marketOpen = isMarketOpen();
-          const refreshCount = quoteStats?.refreshCount ?? 0;
-          const nextUpdateIn = quotesUpdatedAt ? Math.max(0, 300_000 - (now - quotesUpdatedAt)) : 0;
-          const lastRefreshAgo = quoteStats?.lastRefreshTs ? now - quoteStats.lastRefreshTs : 0;
-          return (
-            <div className="flex items-center gap-2 text-[10px]">
-              <div className="flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-gray-300 font-medium">Live Quotes</span>
-                <span className="text-gray-600">every 5 min · next in {fmtCountdown(nextUpdateIn)}</span>
-              </div>
-              <div className="flex items-center gap-3 ml-2">
-                <div><span className="text-gray-600">Refreshes</span> <span className="text-gray-300 ml-0.5">{refreshCount}</span></div>
-                {lastRefreshAgo > 0 && <div><span className="text-gray-600">Last</span> <span className="text-gray-300 ml-0.5">{fmtCountdown(lastRefreshAgo)} ago</span></div>}
-                {autoBackfilling && <span className="flex items-center gap-0.5 text-amber-400"><RefreshCw size={8} className="animate-spin" /> Syncing...</span>}
-              </div>
-              {(() => { const mc = marketCountdown(); return (
-              <div className="flex items-center gap-3 ml-2">
-                <span className={marketOpen ? "text-emerald-400" : "text-gray-600"}>{marketOpen ? "Market open" : "Closed"} · {mc.label} {fmtCountdown(mc.ms)}</span>
-                <span><span className="text-gray-600">Last Close</span> <span className="text-gray-300 ml-0.5">{fmtDate(target)}</span></span>
-              </div>
-              ); })()}
-            </div>
-          );
-        })()}
+        <BackButton label="Back to portfolios" onClick={onBack} />
+        {livePanel}
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-        <div className="flex items-center gap-3">
+        <div className="flex items-end gap-3">
           <div>
-            <h2 className="text-xl font-semibold text-white">{portfolio?.name}</h2>
-            <p className="text-xs text-gray-500">
-              {portfolio?.description && <>{portfolio.description} &middot; </>}
-              {portfolio?.currency}
-              {cutoffDate && <> &middot; Since {fmtDate(cutoffDate)}</>}
-            </p>
-          </div>
-          <nav className="flex gap-0.5 ml-2">
+            <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+              {portfolio?.name}
+              <Tooltip label="Settings">
+                <button onClick={() => setShowSettings(true)} className="text-gray-600 hover:text-gray-300 transition-colors">
+                  <Settings size={14} />
+                </button>
+              </Tooltip>
+            </h2>
+            <div className="flex items-center gap-2">
+              <p className="text-xs text-gray-500">
+                {portfolio?.description && <>{portfolio.description} &middot; </>}
+                {portfolio?.currency}
+                {cutoffDate && <> &middot; Since {fmtDate(cutoffDate)}</>}
+              </p>
+              <nav className="flex gap-0.5">
             {subTabs.map((t) => (
               <button key={t.id} onClick={() => setSubTab(t.id)}
                 className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors flex items-center gap-1 ${
@@ -281,18 +299,15 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                 {t.icon} {t.label}
               </button>
             ))}
-          </nav>
-          <Tooltip label="Settings">
-            <button onClick={() => setShowSettings(true)} className="text-gray-600 hover:text-gray-300 transition-colors ml-1">
-              <Settings size={14} />
-            </button>
-          </Tooltip>
+              </nav>
+            </div>
+          </div>
         </div>
         {summary && (() => {
           const live = livePortfolioTotals(summary.positions, liveQuotes);
           const day = livePortfolioDayChange(summary.positions, liveQuotes, allTickerData ?? undefined);
           return (
-          <div className="hidden md:flex items-start gap-6 text-right">
+          <div className="hidden md:flex items-start gap-6 text-center">
             <div>
               <div className="text-sm text-gray-600 uppercase">Cost</div>
               <div className="text-lg font-semibold text-white">{fmtUsd(summary.totalCost)}</div>
@@ -303,7 +318,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
               <div className={`text-[10px] ${glColor(day.chg)}`}>{fmtUsdAbs(day.chg)} ({fmtPctAbs(day.pct)})</div>
             </div>
             <div>
-              <div className="text-sm text-gray-600 uppercase">G/L</div>
+              <div className="text-sm text-gray-600 uppercase">Gain/Loss</div>
               <div className={`text-lg font-semibold ${glColor(live.gl)}`}>{fmtUsdAbs(live.gl)}</div>
             </div>
             <div>
@@ -316,66 +331,10 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
       </div>
 
 
-      {subTab === "positions" && !showAdd && (
-        <div className="flex justify-end gap-2 my-auto py-1">
-          <button onClick={() => setShowAdd("lots")} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><Plus size={12} /> Add Lots</button>
-          <button onClick={() => setShowAdd("positions")} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><Plus size={12} /> Add Tickers</button>
-        </div>
-      )}
 
       {/* === Positions Tab === */}
       {subTab === "positions" && (
         <>
-          {showAdd === "positions" && (
-            <form onSubmit={handleAddPositions} className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4 flex flex-wrap gap-3">
-              <input type="text" placeholder="Ticker symbols (e.g. AAPL, MSFT, GOOG)" value={tickers} onChange={(e) => setTickers(e.target.value)} autoFocus
-                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" required />
-              <div className="flex gap-2">
-                <button type="submit" disabled={adding} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">{adding ? "Adding..." : <><Plus size={12} /> Open</>}</button>
-                <button type="button" onClick={() => setShowAdd(false)} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><X size={12} /> Cancel</button>
-              </div>
-            </form>
-          )}
-
-          {showAdd === "lots" && (
-            <form onSubmit={handleSubmitLots} className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4 space-y-3 overflow-x-auto">
-              <div className="flex items-center gap-3 mb-2">
-                <DateInput value={lotDate} onChange={setLotDate} label="Date" />
-              </div>
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-xs text-gray-500 uppercase">
-                    <th className="text-left px-1 py-1 w-24">Ticker</th>
-                    <th className="text-left px-1 py-1 w-20">Type</th>
-                    <th className="text-right px-1 py-1 w-24">Quantity</th>
-                    <th className="text-right px-1 py-1 w-24">Price</th>
-                    <th className="text-right px-1 py-1 w-20">Fees</th>
-                    <th className="text-left px-1 py-1">Notes</th>
-                    <th className="w-8"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lotRows.map((row, i) => (
-                    <tr key={i}>
-                      <td className="px-1 py-1"><input type="text" value={row.ticker} onChange={(e) => updateRow(i, "ticker", e.target.value.toUpperCase())} placeholder="AAPL" autoFocus={i === 0} className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-white placeholder-gray-600" /></td>
-                      <td className="px-1 py-1"><select value={row.type} onChange={(e) => updateRow(i, "type", e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-white"><option value="buy">Buy</option><option value="sell">Sell</option></select></td>
-                      <td className="px-1 py-1"><input type="number" step="any" value={row.quantity} onChange={(e) => updateRow(i, "quantity", e.target.value)} placeholder="0" className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-white text-right placeholder-gray-600" /></td>
-                      <td className="px-1 py-1"><input type="number" step="0.01" value={row.price} onChange={(e) => updateRow(i, "price", e.target.value)} placeholder="0.00" className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-white text-right placeholder-gray-600" /></td>
-                      <td className="px-1 py-1"><input type="number" step="0.01" value={row.fees} onChange={(e) => updateRow(i, "fees", e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-white text-right" /></td>
-                      <td className="px-1 py-1"><input type="text" value={row.notes} onChange={(e) => updateRow(i, "notes", e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-white placeholder-gray-600" /></td>
-                      <td className="px-1 py-1">{lotRows.length > 1 && <button type="button" onClick={() => setLotRows((r) => r.filter((_, idx) => idx !== i))} className="text-gray-600 hover:text-red-400 px-1"><Trash2 size={12} /></button>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="flex items-center gap-3">
-                <button type="button" onClick={() => setLotRows((r) => [...r, emptyRow()])} className="text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1"><Plus size={12} /> Add row</button>
-                <div className="flex-1" />
-                <button type="submit" disabled={adding} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">{adding ? "Adding..." : <><Plus size={12} /> Submit Lots</>}</button>
-                <button type="button" onClick={() => setShowAdd(false)} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><X size={12} /> Cancel</button>
-              </div>
-            </form>
-          )}
 
           <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-x-auto">
             <table className="w-full text-base">
@@ -387,7 +346,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                     { key: "avgCostBasis", label: "Avg Cost", align: "right" },
                     { key: "currentPrice", label: "Current", align: "right" },
                     { key: "marketValue", label: "Mkt Value", align: "right" },
-                    { key: "unrealizedGL", label: "G/L", align: "right" },
+                    { key: "unrealizedGL", label: "Gain/Loss", align: "right" },
                     { key: "unrealizedGLPercent", label: "G/L %", align: "right" },
                     { key: "lots", label: "Lots", align: "right" },
                     { key: "pe", label: "P/E", align: "right" },
@@ -516,6 +475,61 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
               <p className="text-gray-600 text-center py-8">No positions yet.</p>
             )}
           </div>
+          {!showAdd && (
+            <div className="flex justify-end gap-2 mt-2">
+              <button onClick={() => setShowAdd("lots")} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><Plus size={12} /> Add Lots</button>
+              <button onClick={() => setShowAdd("positions")} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><Plus size={12} /> Add Tickers</button>
+            </div>
+          )}
+          {showAdd === "positions" && (
+            <form onSubmit={handleAddPositions} className="bg-gray-900 border border-gray-800 rounded-xl p-4 mt-2 flex flex-wrap gap-3">
+              <input type="text" placeholder="Ticker symbols (e.g. AAPL, MSFT, GOOG)" value={tickers} onChange={(e) => setTickers(e.target.value)} autoFocus
+                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" required />
+              <div className="flex gap-2">
+                <button type="submit" disabled={adding} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">{adding ? "Adding..." : <><Plus size={12} /> Open</>}</button>
+                <button type="button" onClick={() => setShowAdd(false)} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><X size={12} /> Cancel</button>
+              </div>
+            </form>
+          )}
+          {showAdd === "lots" && (
+            <form onSubmit={handleSubmitLots} className="bg-gray-900 border border-gray-800 rounded-xl p-4 mt-2 space-y-3 overflow-x-auto">
+              <div className="flex items-center gap-3 mb-2">
+                <DateInput value={lotDate} onChange={setLotDate} label="Date" />
+              </div>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-xs text-gray-500 uppercase">
+                    <th className="text-left px-1 py-1 w-24">Ticker</th>
+                    <th className="text-left px-1 py-1 w-20">Type</th>
+                    <th className="text-right px-1 py-1 w-24">Quantity</th>
+                    <th className="text-right px-1 py-1 w-24">Price</th>
+                    <th className="text-right px-1 py-1 w-20">Fees</th>
+                    <th className="text-left px-1 py-1">Notes</th>
+                    <th className="w-8"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lotRows.map((row, i) => (
+                    <tr key={i}>
+                      <td className="px-1 py-1"><input type="text" value={row.ticker} onChange={(e) => updateRow(i, "ticker", e.target.value.toUpperCase())} placeholder="AAPL" autoFocus={i === 0} className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-white placeholder-gray-600" /></td>
+                      <td className="px-1 py-1"><select value={row.type} onChange={(e) => updateRow(i, "type", e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-white"><option value="buy">Buy</option><option value="sell">Sell</option></select></td>
+                      <td className="px-1 py-1"><input type="number" step="any" value={row.quantity} onChange={(e) => updateRow(i, "quantity", e.target.value)} placeholder="0" className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-white text-right placeholder-gray-600" /></td>
+                      <td className="px-1 py-1"><input type="number" step="0.01" value={row.price} onChange={(e) => updateRow(i, "price", e.target.value)} placeholder="0.00" className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-white text-right placeholder-gray-600" /></td>
+                      <td className="px-1 py-1"><input type="number" step="0.01" value={row.fees} onChange={(e) => updateRow(i, "fees", e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-white text-right" /></td>
+                      <td className="px-1 py-1"><input type="text" value={row.notes} onChange={(e) => updateRow(i, "notes", e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-white placeholder-gray-600" /></td>
+                      <td className="px-1 py-1">{lotRows.length > 1 && <button type="button" onClick={() => setLotRows((r) => r.filter((_, idx) => idx !== i))} className="text-gray-600 hover:text-red-400 px-1"><Trash2 size={12} /></button>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={() => setLotRows((r) => [...r, emptyRow()])} className="text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1"><Plus size={12} /> Add row</button>
+                <div className="flex-1" />
+                <button type="submit" disabled={adding} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">{adding ? "Adding..." : <><Plus size={12} /> Submit Lots</>}</button>
+                <button type="button" onClick={() => setShowAdd(false)} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><X size={12} /> Cancel</button>
+              </div>
+            </form>
+          )}
         </>
       )}
 

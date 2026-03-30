@@ -183,11 +183,13 @@ export function fmtDividendYield(dy: number | null | undefined) {
   return dy != null ? `${(dy * 100).toFixed(2)}%` : "—";
 }
 
-/** Last settled trading date (after market close ~4pm ET / 21:00 UTC) */
+/** Last settled trading date — today if market closed and settled, else previous trading day */
 export function lastTradingDate(): string {
   const now = new Date();
   const d = new Date(now);
-  if (now.getUTCHours() < 21) d.setDate(d.getDate() - 1);
+  // If market is open or still settling, today's close isn't available yet
+  if (shouldPollQuotes()) d.setDate(d.getDate() - 1);
+  // Skip weekends
   const day = d.getDay();
   if (day === 0) d.setDate(d.getDate() - 2);
   if (day === 6) d.setDate(d.getDate() - 1);
@@ -199,11 +201,21 @@ export function isMarketOpen(): boolean {
   const now = new Date();
   const day = now.getDay();
   if (day === 0 || day === 6) return false;
-  // Convert to ET using Intl to handle DST automatically
   const etTime = now.toLocaleString("en-US", { timeZone: "America/New_York", hour12: false, hour: "2-digit", minute: "2-digit" });
   const [h, m] = etTime.split(":").map(Number);
   const etMin = h * 60 + m;
   return etMin >= 9 * 60 + 30 && etMin < 16 * 60;
+}
+
+/** Whether we should poll for quotes — during market hours + 15min after close for settlement */
+export function shouldPollQuotes(): boolean {
+  const now = new Date();
+  const day = now.getDay();
+  if (day === 0 || day === 6) return false;
+  const etTime = now.toLocaleString("en-US", { timeZone: "America/New_York", hour12: false, hour: "2-digit", minute: "2-digit" });
+  const [h, m] = etTime.split(":").map(Number);
+  const etMin = h * 60 + m;
+  return etMin >= 9 * 60 + 30 && etMin < 16 * 60 + 30;
 }
 
 /** Format a relative time like "2h 15m", "4m 15s", or "30s" */

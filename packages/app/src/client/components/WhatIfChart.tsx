@@ -17,66 +17,40 @@ export function WhatIfChart({ portfolioId, cutoffDate, onSelectTicker }: { portf
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-      <div className="flex items-center gap-2 mb-4">
-        <h3 className="text-sm font-medium text-gray-400">
-          What If I Bought Everything On
-        </h3>
-        <DateInput value={whatIfDate} onChange={setWhatIfDate} />
-      </div>
-
-      {/* Summary cards */}
-      {data && data.positions.length > 0 && (() => {
-        const totalActual = data.positions.reduce((s, p) => s + p.actualCost, 0);
-        const totalWhatIf = data.positions.reduce((s, p) => s + p.whatIfCost, 0);
-        const totalDiff = totalActual - totalWhatIf;
-        const totalPct = totalWhatIf > 0 ? (totalDiff / totalWhatIf) * 100 : 0;
-        const last = data.timeline.at(-1);
-        const actualValue = last?.actualValue ?? 0;
-        const whatIfValue = last?.whatIfValue ?? 0;
-        const actualGL = actualValue - totalActual;
-        const whatIfGL = whatIfValue - totalWhatIf;
-
-        return (
-          <>
-            {/* Totals */}
-            <div className="flex flex-wrap gap-3 mb-3">
-              <div className="bg-gray-800/50 rounded-lg p-3 border border-gray-700">
-                <div className="text-xs text-gray-500">Cost Basis</div>
-                <div className="text-sm font-semibold text-white">{fmtUsd(totalActual)}</div>
-              </div>
-              <div className="bg-gray-800/50 rounded-lg p-3 border border-gray-700">
-                <div className="text-xs text-gray-500">What-If Cost</div>
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-medium text-gray-400">
+            What If I Bought Everything On
+          </h3>
+          <DateInput value={whatIfDate} onChange={setWhatIfDate} />
+        </div>
+        {data && data.positions.length > 0 && (() => {
+          const totalActual = data.positions.reduce((s, p) => s + p.actualCost, 0);
+          const totalWhatIf = data.positions.reduce((s, p) => s + p.whatIfCost, 0);
+          const last = data.timeline.at(-1);
+          const actualGL = (last?.actualValue ?? 0) - totalActual;
+          const whatIfGL = (last?.whatIfValue ?? 0) - totalWhatIf;
+          const advantage = actualGL - whatIfGL;
+          return (
+            <div className="flex items-start gap-5 text-right">
+              <div>
+                <div className="text-[10px] text-gray-600 uppercase">What-If Cost</div>
                 <div className="text-sm font-semibold text-white">{fmtUsd(totalWhatIf)}</div>
               </div>
-              <div className="bg-gray-800/50 rounded-lg p-3 border border-gray-700">
-                <div className="text-xs text-gray-500">Actual G/L</div>
-                <div className={`text-sm font-semibold ${actualGL >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                  {fmtUsdAbs(actualGL)} ({totalActual > 0 ? Math.abs((actualGL / totalActual) * 100).toFixed(1) : 0}%)
-                </div>
+              <div>
+                <div className="text-[10px] text-gray-600 uppercase">What-If G/L</div>
+                <div className={`text-sm font-semibold ${whatIfGL >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fmtUsdAbs(whatIfGL)}</div>
+                <div className={`text-[10px] ${whatIfGL >= 0 ? "text-emerald-400" : "text-red-400"}`}>{totalWhatIf > 0 ? Math.abs((whatIfGL / totalWhatIf) * 100).toFixed(2) : 0}%</div>
               </div>
-              <div className="bg-gray-800/50 rounded-lg p-3 border border-gray-700">
-                <div className="text-xs text-gray-500">What-If G/L</div>
-                <div className={`text-sm font-semibold ${whatIfGL >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                  {fmtUsdAbs(whatIfGL)} ({totalWhatIf > 0 ? Math.abs((whatIfGL / totalWhatIf) * 100).toFixed(1) : 0}%)
-                </div>
-              </div>
-              <div className="bg-gray-800/50 rounded-lg p-3 border border-indigo-500/50">
-                <div className="text-xs text-gray-500">Your Timing</div>
-                {(() => {
-                  const advantage = actualGL - whatIfGL;
-                  return (
-                    <div className={`text-sm font-semibold ${advantage >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                      {fmtUsdAbs(advantage)}
-                      <span className="text-xs ml-1">{advantage >= 0 ? "better" : "worse"}</span>
-                    </div>
-                  );
-                })()}
+              <div>
+                <div className="text-[10px] text-gray-600 uppercase">Your Timing</div>
+                <div className={`text-sm font-semibold ${advantage >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fmtUsdAbs(advantage)}</div>
+                <div className={`text-[10px] ${advantage >= 0 ? "text-emerald-400" : "text-red-400"}`}>{advantage >= 0 ? "better" : "worse"}</div>
               </div>
             </div>
-
-          </>
-        );
-      })()}
+          );
+        })()}
+      </div>
 
       {/* Chart */}
       {isLoading && <div className="text-gray-500 text-center py-8">Loading...</div>}
@@ -91,7 +65,7 @@ export function WhatIfChart({ portfolioId, cutoffDate, onSelectTicker }: { portf
         }));
         return (
           <ResponsiveContainer width="100%" height={300}>
-            <ComposedChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+            <ComposedChart data={chartData} margin={{ top: 0, right: -10, bottom: 0, left: 0 }}>
               <defs>
                 <linearGradient id="timingGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor={timingColor} stopOpacity={0.2} />
@@ -127,7 +101,7 @@ export function WhatIfChart({ portfolioId, cutoffDate, onSelectTicker }: { portf
                 }
               />
               <ReferenceLine yAxisId="value" x={whatIfDate} stroke="#f59e0b" strokeDasharray="5 5" label={{ value: "Buy date", fill: "#f59e0b", fontSize: 11 }} />
-              <ReferenceLine yAxisId="value" y={data.timeline[0]?.whatIfCost ?? 0} stroke="#94a3b8" strokeOpacity={0.3} label={{ value: `What-If Cost`, position: "insideTopRight", fill: "#64748b", fontSize: 10 }} />
+              <ReferenceLine yAxisId="value" y={data.timeline[0]?.whatIfCost ?? 0} stroke="#94a3b8" strokeOpacity={0.3} />
               <ReferenceLine yAxisId="delta" y={0} stroke="#475569" strokeDasharray="3 3" />
               {cutoffDate && cutoffDate !== whatIfDate && <ReferenceLine yAxisId="value" x={cutoffDate} stroke="#f59e0b" strokeDasharray="3 3" strokeOpacity={0.5} label={{ value: "Cutoff", fill: "#f59e0b", fontSize: 9, position: "insideTopLeft" }} />}
               <Area yAxisId="delta" type="monotone" dataKey="timingDelta" fill="url(#timingGrad)" stroke={timingColor} strokeWidth={1} dot={false} />

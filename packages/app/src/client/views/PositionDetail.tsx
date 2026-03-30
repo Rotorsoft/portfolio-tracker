@@ -1,13 +1,13 @@
 import { useState } from "react";
-import { ArrowLeft, Plus, Upload, Trash2, X, Lightbulb, ExternalLink } from "lucide-react";
+import { Plus, Upload, Trash2, X, Lightbulb, ExternalLink } from "lucide-react";
 import { Tooltip } from "../components/Tooltip.js";
 import { trpc } from "../trpc.js";
 import { TickerChart } from "../components/TickerChart.js";
 import { DateInput } from "../components/DateInput.js";
 import { fmtDate, fmtUsd, fmtUsdAbs, fmtPctAbs, glColor } from "../fmt.js";
-import { getLiveAlerts, liveDayChange, livePositionGL, lastBuyPrice, avgDownOpportunity, avgDownColor, gradeColor } from "../live.js";
+import { getLiveAlerts, liveDayChange, livePositionGL, lastBuyPrice, avgDownOpportunity, avgDownColor, gradeColor, shouldPollQuotes } from "../live.js";
 
-type Props = { positionId: string; portfolioId: string; ticker: string; cutoffDate?: string; dipThreshold?: number; onBack: () => void };
+type Props = { positionId: string; portfolioId: string; ticker: string; cutoffDate?: string; dipThreshold?: number };
 
 type KV = { label: string; value: React.ReactNode; color?: string; tooltip?: React.ReactNode };
 
@@ -20,12 +20,12 @@ function KVRow({ kv }: { kv: KV }) {
   );
 }
 
-export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, dipThreshold = 5, onBack }: Props) {
+export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, dipThreshold = 5 }: Props) {
   const { data: position } = trpc.getPosition.useQuery({ positionId });
   const { data: tickerInfo } = trpc.getTicker.useQuery({ symbol: ticker });
   const { data: liveQuotes } = trpc.getQuotes.useQuery(
     { symbols: [ticker] },
-    { refetchInterval: 300_000 }
+    { refetchInterval: shouldPollQuotes() ? 300_000 : false }
   );
   const liveQuote = liveQuotes?.[ticker];
   const { data: entry } = trpc.getEntryAnalysis.useQuery({ positionId });
@@ -133,9 +133,6 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, di
 
   return (
     <div>
-      <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-300 mb-4 flex items-center gap-1">
-        <ArrowLeft size={14} /> Back to portfolio
-      </button>
 
       {(() => {
         const shares = position.totalShares ?? 0;
@@ -218,9 +215,6 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, di
                   return <span className={`text-sm font-medium ${glColor(day.chg)}`}>{fmtUsdAbs(day.chg)} ({fmtPctAbs(day.pct)})</span>;
                 })()}
               </div>
-              <button onClick={() => setShowAdd(!showAdd)} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium transition-colors flex items-center gap-1">
-                {showAdd ? <><X size={12} /> Cancel</> : <><Plus size={12} /> Add Lot</>}
-              </button>
             </div>
             {ti?.name && <div className="text-xs text-gray-500 -mt-1 mb-2">{ti.name}</div>}
             {/* Three groups, stacking on small screens */}
@@ -317,74 +311,20 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, di
 
       <TickerChart symbol={position.ticker} lots={position.lots ?? []} cutoffDate={cutoffDate} />
 
-      {showAdd && (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-6 space-y-3 overflow-x-auto">
-          <div className="flex gap-2 mb-2">
-            <button onClick={() => setAddMode("single")}
-              className={`text-xs px-3 py-1 rounded-md ${addMode === "single" ? "bg-indigo-600 text-white" : "text-gray-400 hover:text-white"}`}>
-              Single
-            </button>
-            <button onClick={() => setAddMode("bulk")}
-              className={`text-xs px-3 py-1 rounded-md ${addMode === "bulk" ? "bg-indigo-600 text-white" : "text-gray-400 hover:text-white"}`}>
-              Bulk (CSV)
-            </button>
-          </div>
-
-          {addMode === "single" ? (
-            <form onSubmit={handleAddLot} className="space-y-3">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <select value={lotForm.type} onChange={(e) => setLotForm({ ...lotForm, type: e.target.value as "buy" | "sell" })}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white">
-                  <option value="buy">Buy</option>
-                  <option value="sell">Sell</option>
-                </select>
-                <DateInput value={lotForm.transaction_date} onChange={(v) => setLotForm({ ...lotForm, transaction_date: v })} />
-                <input type="number" placeholder="Quantity" step="any" value={lotForm.quantity}
-                  onChange={(e) => setLotForm({ ...lotForm, quantity: e.target.value })}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500" required />
-                <input type="number" placeholder="Price" step="0.01" value={lotForm.price}
-                  onChange={(e) => setLotForm({ ...lotForm, price: e.target.value })}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500" required />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <input type="number" placeholder="Fees" step="0.01" value={lotForm.fees}
-                  onChange={(e) => setLotForm({ ...lotForm, fees: e.target.value })}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500" />
-                <input type="text" placeholder="Notes" value={lotForm.notes}
-                  onChange={(e) => setLotForm({ ...lotForm, notes: e.target.value })}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500" />
-              </div>
-              <button type="submit" disabled={adding}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">
-                {adding ? "Adding..." : <><Plus size={12} /> Add Lot</>}
-              </button>
-            </form>
-          ) : (
-            <form onSubmit={handleBulkAdd} className="space-y-3">
-              <textarea
-                value={bulkText}
-                onChange={(e) => setBulkText(e.target.value)}
-                placeholder={"Paste lots, one per line:\nbuy, 2024-01-15, 100, 150.50, 4.99, Initial buy\nsell, 2024-06-01, 50, 180.00, 4.99, Took profits"}
-                rows={6}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-              />
-              <p className="text-xs text-gray-600">Format: type, date, quantity, price, fees, notes</p>
-              <button type="submit" disabled={adding}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">
-                {adding ? "Adding..." : <><Upload size={12} /> Add All Lots</>}
-              </button>
-            </form>
-          )}
-        </div>
-      )}
-
       {/* Lots Table — consolidated with entry analysis */}
       {(() => {
         const entryMap = new Map(entry?.analysis?.lots.map((a) => [a.lotId, a]) ?? []);
         return (
           <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-x-auto mb-6">
             <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
-              <h3 className="font-medium text-white">Lots</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-medium text-white">Lots</h3>
+                {!showAdd && (
+                  <button onClick={() => setShowAdd(true)} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2 py-0.5 rounded text-xs font-medium transition-colors flex items-center gap-1">
+                    <Plus size={10} /> Add
+                  </button>
+                )}
+              </div>
               {(() => {
                 const lbp2 = lastBuyPrice(position.lots ?? []);
                 if (lbp2 <= 0) return null;
@@ -467,6 +407,73 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, di
           </div>
         );
       })()}
+
+      {showAdd && (
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 mt-2 space-y-3 overflow-x-auto">
+          <div className="flex gap-2 mb-2">
+            <button onClick={() => setAddMode("single")}
+              className={`text-xs px-3 py-1 rounded-md ${addMode === "single" ? "bg-indigo-600 text-white" : "text-gray-400 hover:text-white"}`}>
+              Single
+            </button>
+            <button onClick={() => setAddMode("bulk")}
+              className={`text-xs px-3 py-1 rounded-md ${addMode === "bulk" ? "bg-indigo-600 text-white" : "text-gray-400 hover:text-white"}`}>
+              Bulk (CSV)
+            </button>
+          </div>
+
+          {addMode === "single" ? (
+            <form onSubmit={handleAddLot} className="space-y-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <select value={lotForm.type} onChange={(e) => setLotForm({ ...lotForm, type: e.target.value as "buy" | "sell" })}
+                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white">
+                  <option value="buy">Buy</option>
+                  <option value="sell">Sell</option>
+                </select>
+                <DateInput value={lotForm.transaction_date} onChange={(v) => setLotForm({ ...lotForm, transaction_date: v })} />
+                <input type="number" placeholder="Quantity" step="any" value={lotForm.quantity}
+                  onChange={(e) => setLotForm({ ...lotForm, quantity: e.target.value })}
+                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500" required />
+                <input type="number" placeholder="Price" step="0.01" value={lotForm.price}
+                  onChange={(e) => setLotForm({ ...lotForm, price: e.target.value })}
+                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500" required />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <input type="number" placeholder="Fees" step="0.01" value={lotForm.fees}
+                  onChange={(e) => setLotForm({ ...lotForm, fees: e.target.value })}
+                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500" />
+                <input type="text" placeholder="Notes" value={lotForm.notes}
+                  onChange={(e) => setLotForm({ ...lotForm, notes: e.target.value })}
+                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500" />
+              </div>
+              <div className="flex gap-2">
+                <button type="submit" disabled={adding}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">
+                  {adding ? "Adding..." : <><Plus size={12} /> Add Lot</>}
+                </button>
+                <button type="button" onClick={() => setShowAdd(false)} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><X size={10} /> Cancel</button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleBulkAdd} className="space-y-3">
+              <textarea
+                value={bulkText}
+                onChange={(e) => setBulkText(e.target.value)}
+                placeholder={"Paste lots, one per line:\nbuy, 2024-01-15, 100, 150.50, 4.99, Initial buy\nsell, 2024-06-01, 50, 180.00, 4.99, Took profits"}
+                rows={6}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+              />
+              <p className="text-xs text-gray-600">Format: type, date, quantity, price, fees, notes</p>
+              <div className="flex gap-2">
+                <button type="submit" disabled={adding}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">
+                  {adding ? "Adding..." : <><Upload size={12} /> Add All Lots</>}
+                </button>
+                <button type="button" onClick={() => setShowAdd(false)} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><X size={10} /> Cancel</button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -278,7 +278,7 @@ describe("lastTradingDate", () => {
   });
 
   it("never returns a weekend", () => {
-    const d = new Date(lastTradingDate());
+    const d = new Date(lastTradingDate() + "T12:00:00");
     expect(d.getDay()).not.toBe(0);
     expect(d.getDay()).not.toBe(6);
   });
