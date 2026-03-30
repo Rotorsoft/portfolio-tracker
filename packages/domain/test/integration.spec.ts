@@ -8,6 +8,7 @@ import {
   migrateDb,
   getPortfolios,
   getPortfolio,
+  getPosition,
   getPositionsByPortfolio,
   getPositionById,
   ensureTicker,
@@ -16,8 +17,14 @@ import {
   backfillPrices,
   getTickerPrices,
   getMissingPriceDates,
+  getPriceDateRange,
+  getPriceOnOrAfterDate,
+  getTickerFundamentals,
+  upsertTickerFundamentals,
   getUserByEmail,
   getAllUsers,
+  recomputeIndicators,
+  recalcPositionAnalytics,
   type AppActor,
 } from "../src/index.js";
 
@@ -264,6 +271,172 @@ describe("Integration: projections & queries", () => {
       const t = await getTicker("INTTEST");
       expect(t!.name).toBe("Integration Test Corp");
       expect(t!.exchange).toBe("TEST");
+    });
+
+    it("should backfill with previousClose in metadata", async () => {
+      await backfillPrices("INTTEST", [], { previousClose: 105 });
+      const t = await getTicker("INTTEST");
+      expect(t!.previousClose).toBe(105);
+    });
+
+    it("should recompute indicators from existing prices", async () => {
+      // Backfill enough prices for indicators
+      const sym = `IND${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
+      await ensureTicker(sym);
+      const prices = [];
+      for (let i = 0; i < 60; i++) {
+        const d = new Date("2024-01-01");
+        d.setDate(d.getDate() + i);
+        prices.push({
+          date: d.toISOString().split("T")[0],
+          open: 100 + i * 0.5,
+          high: 102 + i * 0.5,
+          low: 99 + i * 0.5,
+          close: 101 + i * 0.5,
+          volume: 1000000,
+        });
+      }
+      await backfillPrices(sym, prices);
+      await recomputeIndicators(sym);
+      const t = await getTicker(sym);
+      expect(t).toBeDefined();
+      expect(t!.signal).toBeDefined();
+      expect(t!.compositeScore).toBeDefined();
+    });
+
+    it("should list all tickers", async () => {
+      const all = await getTickers();
+      expect(Array.isArray(all)).toBe(true);
+      expect(all.length).toBeGreaterThan(0);
+    });
+
+    it("should get price date range across all tickers", async () => {
+      const range = await getPriceDateRange();
+      expect(range).not.toBeNull();
+      expect(range!.firstDate).toBeDefined();
+      expect(range!.lastDate).toBeDefined();
+    });
+
+    it("should get price on or after date", async () => {
+      const p = await getPriceOnOrAfterDate("INTTEST", "2024-01-02");
+      expect(p).toBeDefined();
+      expect(p!.date).toBe("2024-01-02");
+    });
+
+    it("should get price on or after date when exact missing", async () => {
+      const p = await getPriceOnOrAfterDate("INTTEST", "2024-01-01");
+      expect(p).toBeDefined();
+      expect(p!.date).toBe("2024-01-02"); // first available
+    });
+
+    it("should upsert and get ticker fundamentals", async () => {
+      await upsertTickerFundamentals("INTTEST", {
+        trailingPE: 25.5, forwardPE: 22.0, epsTrailing: 5.0, epsForward: 6.0,
+        dividendYield: 0.015, marketCap: 1000000000, bookValue: 30,
+        priceToBook: 3.5, fiftyTwoWeekHigh: 120, fiftyTwoWeekLow: 80,
+        sector: "Technology", industry: "Software",
+      });
+      const f = await getTickerFundamentals("INTTEST");
+      expect(f).toBeDefined();
+      expect(f!.trailingPE).toBe(25.5);
+      expect(f!.sector).toBe("Technology");
+    });
+
+    it("should get missing price dates with count and range", async () => {
+      const info = await getMissingPriceDates("INTTEST", "2024-01-01", "2024-01-10");
+      expect(info.total).toBeGreaterThan(0);
+      expect(info.firstDate).toBeDefined();
+      expect(info.lastDate).toBeDefined();
+      expect(typeof info.missing).toBe("number");
+    });
+  });
+
+  describe("Position analytics", () => {
+    it("should recalc position analytics with prices", async () => {
+      // Create portfolio with position and lot
+      const pid = `analytics-${crypto.randomUUID()}`;
+      await app.do("CreatePortfolio", { stream: pid, actor }, { name: "Analytics Test" });
+      await app.do("OpenPosition", { stream: pid, actor }, { ticker: "ANLYT" });
+      await app.do("AddLot", { stream: pid, actor }, {
+        ticker: "ANLYT",
+        lot: { id: "a-1", type: "buy", transaction_date: "2024-03-15", quantity: 100, price: 105, fees: 5 },
+      });
+      await awaitSettle();
+
+      // Backfill prices for the ticker
+      await ensureTicker("ANLYT");
+      const prices = [];
+      for (let i = 0; i < 60; i++) {
+        const d = new Date("2024-01-01");
+        d.setDate(d.getDate() + i);
+        prices.push({
+          date: d.toISOString().split("T")[0],
+          open: 100 + Math.sin(i * 0.2) * 5,
+          high: 105 + Math.sin(i * 0.2) * 5,
+          low: 95 + Math.sin(i * 0.2) * 5,
+          close: 100 + Math.sin(i * 0.2) * 5,
+          volume: 1000000,
+        });
+      }
+      await backfillPrices("ANLYT", prices);
+
+      // Recalc analytics
+      const posId = `${pid}:ANLYT`;
+      await recalcPositionAnalytics(posId);
+
+      const pos = await getPositionById(posId);
+      expect(pos).not.toBeNull();
+      // Should have computed analytics
+      expect(typeof pos!.timingScore).toBe("number");
+      expect(typeof pos!.maxDrawdown).toBe("number");
+    });
+
+    it("should get positions by portfolio with lots", async () => {
+      const pid = `posby-${crypto.randomUUID()}`;
+      await app.do("CreatePortfolio", { stream: pid, actor }, { name: "PosByPortfolio" });
+      await app.do("OpenPosition", { stream: pid, actor }, { ticker: "PBP1" });
+      await app.do("AddLot", { stream: pid, actor }, {
+        ticker: "PBP1",
+        lot: { id: "pbp-1", type: "buy", transaction_date: "2024-01-15", quantity: 50, price: 100, fees: 0 },
+      });
+      await awaitSettle();
+
+      const positions = await getPositionsByPortfolio(pid);
+      expect(positions.length).toBeGreaterThanOrEqual(1);
+      const pos = positions.find((p) => p.ticker === "PBP1");
+      expect(pos).toBeDefined();
+      expect(pos!.lots).toBeDefined();
+      expect(pos!.lots.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("should get position by portfolio and ticker", async () => {
+      const pid = `getpos-${crypto.randomUUID()}`;
+      await app.do("CreatePortfolio", { stream: pid, actor }, { name: "GetPos Test" });
+      await app.do("OpenPosition", { stream: pid, actor }, { ticker: "GP1" });
+      await app.do("AddLot", { stream: pid, actor }, {
+        ticker: "GP1",
+        lot: { id: "gp-1", type: "buy", transaction_date: "2024-02-01", quantity: 25, price: 80, fees: 2 },
+      });
+      await awaitSettle();
+      const pos = await getPosition(pid, "GP1");
+      expect(pos).not.toBeNull();
+      expect(pos!.ticker).toBe("GP1");
+      expect(pos!.lots.length).toBe(1);
+    });
+
+    it("should return null for non-existent position", async () => {
+      const pos = await getPosition("nonexistent", "NOPE");
+      expect(pos).toBeNull();
+    });
+
+    it("should handle portfolio archive projection", async () => {
+      const pid = `arch-${crypto.randomUUID()}`;
+      await app.do("CreatePortfolio", { stream: pid, actor }, { name: "To Archive" });
+      await app.do("ArchivePortfolio", { stream: pid, actor }, {});
+      await awaitSettle();
+      const p = await getPortfolio(pid);
+      expect(p).not.toBeNull();
+      expect(p!.status).toBe("archived");
     });
   });
 });
