@@ -363,14 +363,17 @@ describe("Integration: projections & queries", () => {
       });
       await awaitSettle();
 
-      // Backfill prices for the ticker
+      // Backfill prices covering the lot date and beyond
       await ensureTicker("ANLYT");
       const prices = [];
-      for (let i = 0; i < 60; i++) {
-        const d = new Date("2024-01-01");
-        d.setDate(d.getDate() + i);
+      const seen = new Set<string>();
+      for (let i = 0; i < 120; i++) {
+        const d = new Date(Date.UTC(2024, 0, 1 + i));
+        const date = d.toISOString().split("T")[0];
+        if (seen.has(date)) continue;
+        seen.add(date);
         prices.push({
-          date: d.toISOString().split("T")[0],
+          date,
           open: 100 + Math.sin(i * 0.2) * 5,
           high: 105 + Math.sin(i * 0.2) * 5,
           low: 95 + Math.sin(i * 0.2) * 5,
