@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, Plus, Upload, Trash2, X, Lightbulb } from "lucide-react";
+import { ArrowLeft, Plus, Upload, Trash2, X, Lightbulb, ExternalLink } from "lucide-react";
 import { Tooltip } from "../components/Tooltip.js";
 import { trpc } from "../trpc.js";
 import { TickerChart } from "../components/TickerChart.js";
@@ -209,7 +209,7 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, di
             {/* Hero: ticker, price, signal, add button */}
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-baseline gap-3">
-                <h2 className="text-lg font-semibold text-white">{position.ticker}</h2>
+                <h2 className="text-lg font-semibold text-white flex items-center gap-1.5">{position.ticker} <a href={`https://finance.yahoo.com/quote/${position.ticker}`} target="_blank" rel="noopener noreferrer" className="text-gray-600 hover:text-gray-400"><ExternalLink size={12} /></a></h2>
                 {currentPrice > 0 && <span className="text-2xl font-bold text-white">{fmtUsd(currentPrice)}</span>}
                 {(() => {
                   const pc = liveQuote?.previousClose ?? ti?.previousClose ?? 0;

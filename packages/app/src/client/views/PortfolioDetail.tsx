@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { ArrowLeft, Plus, X, RefreshCw, Trash2, Settings, LayoutList, BarChart3, Database } from "lucide-react";
+import { ArrowLeft, Plus, X, RefreshCw, Trash2, Settings, LayoutList, BarChart3, Database, ExternalLink } from "lucide-react";
 import { Tooltip } from "../components/Tooltip.js";
 import { trpc } from "../trpc.js";
 import { useNav, type SubTab } from "../hooks/useNav.js";
@@ -479,6 +479,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                     <td className="px-3 py-2">
                       <div className="flex items-baseline gap-1.5">
                         <span className="font-medium text-white">{pos.ticker}</span>
+                        <a href={`https://finance.yahoo.com/quote/${pos.ticker}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-gray-600 hover:text-gray-400"><ExternalLink size={10} /></a>
                       </div>
                       {pos.tickerName && <div className="text-[10px] text-gray-600 truncate max-w-[100px]">{pos.tickerName}</div>}
                       {(() => { const lp = getLivePrice(liveQuotes, pos.ticker, pos.currentPrice); const opp = avgDownOpportunity(pos.lastBuyPrice, lp, pos.avgCostBasis, pos.totalShares); const color = opp ? avgDownColor(opp.gapPct, portfolio?.dipThreshold ?? 5) : ""; return opp && color ? <div className={`text-[10px] font-medium ${color}`}>▼ {fmtPctAbs(opp.gapPct)} below last buy</div> : null; })()}
