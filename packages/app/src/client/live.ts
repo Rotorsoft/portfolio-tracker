@@ -60,6 +60,25 @@ export function livePortfolioTotals(
   return { totalValue, totalCost, gl, glPct };
 }
 
+/** Compute daily change across all positions using live vs previous close */
+export function livePortfolioDayChange(
+  positions: { ticker: string; totalShares: number; currentPrice: number }[],
+  quotes: LiveQuotes | undefined,
+  tickers: { symbol: string; previousClose: number }[] | undefined
+) {
+  let dayValue = 0;
+  let prevValue = 0;
+  for (const p of positions) {
+    const lp = getLivePrice(quotes, p.ticker, p.currentPrice);
+    const pc = quotes?.[p.ticker]?.previousClose ?? tickers?.find((t) => t.symbol === p.ticker)?.previousClose ?? lp;
+    dayValue += p.totalShares * lp;
+    prevValue += p.totalShares * pc;
+  }
+  const chg = dayValue - prevValue;
+  const pct = prevValue > 0 ? (chg / prevValue) * 100 : 0;
+  return { chg, pct };
+}
+
 /** Compute live position G/L */
 export function livePositionGL(
   shares: number,

@@ -8,7 +8,7 @@ import { DateInput } from "../components/DateInput.js";
 import { WhatIfChart } from "../components/WhatIfChart.js";
 import { PortfolioSettings } from "../components/PortfolioSettings.js";
 import { fmtDate, fmtMonthYear, fmtUsd, fmtUsdAbs, fmtPctAbs, glColor } from "../fmt.js";
-import { getLivePrice, getLiveAlerts, livePortfolioTotals, livePositionGL, liveDayChange, volatilityColor, gradeColor, signalColor, fmtDividendYield, lastTradingDate, pendingBackfillTickers, isMarketOpen, marketCountdown, fmtCountdown } from "../live.js";
+import { getLivePrice, getLiveAlerts, livePortfolioTotals, livePortfolioDayChange, livePositionGL, liveDayChange, volatilityColor, gradeColor, signalColor, fmtDividendYield, lastTradingDate, pendingBackfillTickers, isMarketOpen, marketCountdown, fmtCountdown } from "../live.js";
 import { InfoTip } from "../components/InfoTip.js";
 
 
@@ -290,8 +290,9 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
         </div>
         {summary && (() => {
           const live = livePortfolioTotals(summary.positions, liveQuotes);
+          const day = livePortfolioDayChange(summary.positions, liveQuotes, allTickerData ?? undefined);
           return (
-          <div className="hidden md:flex items-center gap-6 text-right">
+          <div className="hidden md:flex items-start gap-6 text-right">
             <div>
               <div className="text-sm text-gray-600 uppercase">Cost</div>
               <div className="text-lg font-semibold text-white">{fmtUsd(summary.totalCost)}</div>
@@ -299,6 +300,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
             <div>
               <div className="text-sm text-gray-600 uppercase">Value</div>
               <div className="text-lg font-semibold text-white">{fmtUsd(live.totalValue)}</div>
+              <div className={`text-[10px] ${glColor(day.chg)}`}>{fmtUsdAbs(day.chg)} ({fmtPctAbs(day.pct, 1)})</div>
             </div>
             <div>
               <div className="text-sm text-gray-600 uppercase">G/L</div>
