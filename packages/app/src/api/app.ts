@@ -1,4 +1,4 @@
-import { app } from "@portfolio-tracker/domain";
+import { app } from "@rotorsoft/portfolio-tracker-domain";
 
 /** Always use the last snapshot (handles multi-event actions) */
 export async function doAction(

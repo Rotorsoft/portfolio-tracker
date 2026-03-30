@@ -1,4 +1,4 @@
-import type { PriceRecord, FundamentalsView } from "@portfolio-tracker/domain";
+import type { PriceRecord, FundamentalsView } from "@rotorsoft/portfolio-tracker-domain";
 
 export type FetchResult = {
   prices: PriceRecord[];

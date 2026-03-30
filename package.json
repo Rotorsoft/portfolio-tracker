@@ -1,5 +1,5 @@
 {
-  "name": "portfolio-tracker",
+  "name": "@rotorsoft/portfolio-tracker",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -12,8 +12,8 @@
     "build": "pnpm -r build",
     "test": "vitest run",
     "typecheck": "npx tsc --noEmit --project tsconfig.json",
-    "dev": "pnpm -F @portfolio-tracker/app dev:api & pnpm -F @portfolio-tracker/app dev:client",
-    "start": "pnpm -F @portfolio-tracker/app start",
+    "dev": "pnpm -F @rotorsoft/portfolio-tracker-app dev:api & pnpm -F @rotorsoft/portfolio-tracker-app dev:client",
+    "start": "pnpm -F @rotorsoft/portfolio-tracker-app start",
     "backup": "./scripts/backup-events.sh",
     "restore": "./scripts/restore-events.sh"
   },

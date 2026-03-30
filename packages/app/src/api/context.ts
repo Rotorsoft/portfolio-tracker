@@ -1,4 +1,4 @@
-import { getUserByEmail, type AppActor } from "@portfolio-tracker/domain";
+import { getUserByEmail, type AppActor } from "@rotorsoft/portfolio-tracker-domain";
 import { verifyToken } from "./auth.js";
 
 export type Context = { actor: AppActor | null };

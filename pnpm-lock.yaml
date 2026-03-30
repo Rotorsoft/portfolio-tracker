@@ -26,9 +26,6 @@ importers:
 
   packages/app:
     dependencies:
-      '@portfolio-tracker/domain':
-        specifier: workspace:*
-        version: link:../domain
       '@rotorsoft/act':
         specifier: ^0.25.1
         version: 0.25.1
@@ -38,6 +35,9 @@ importers:
       '@rotorsoft/act-sse':
         specifier: ^1.2.1
         version: 1.2.1
+      '@rotorsoft/portfolio-tracker-domain':
+        specifier: workspace:*
+        version: link:../domain
       '@tanstack/react-query':
         specifier: ^5.90.21
         version: 5.95.2(react@19.2.4)

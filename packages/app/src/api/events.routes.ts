@@ -1,4 +1,4 @@
-import { app } from "@portfolio-tracker/domain";
+import { app } from "@rotorsoft/portfolio-tracker-domain";
 import { tracked } from "@trpc/server";
 import { serializeEvents } from "./helpers.js";
 import { t, publicProcedure } from "./trpc.js";

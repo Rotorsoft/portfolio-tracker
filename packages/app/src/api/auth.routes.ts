@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { app, getUserByEmail, getAllUsers, systemActor } from "@portfolio-tracker/domain";
+import { app, getUserByEmail, getAllUsers, systemActor } from "@rotorsoft/portfolio-tracker-domain";
 import { hashPassword, signToken, verifyPassword } from "./auth.js";
 import { t, publicProcedure, authedProcedure } from "./trpc.js";
 import { doAction } from "./app.js";

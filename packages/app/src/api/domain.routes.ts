@@ -15,7 +15,7 @@ import {
   getTickerFundamentals,
   upsertTickerFundamentals,
   recomputeIndicators,
-} from "@portfolio-tracker/domain";
+} from "@rotorsoft/portfolio-tracker-domain";
 import { z } from "zod";
 import { t, authedProcedure, publicProcedure } from "./trpc.js";
 import { doAction } from "./app.js";
@@ -214,7 +214,7 @@ export const domainRouter = t.router({
   getChartOverlays: publicProcedure
     .input(z.object({ symbol: z.string(), from: z.string().optional() }))
     .query(async ({ input }) => {
-      const { maSeries, bollingerSeries } = await import("@portfolio-tracker/domain");
+      const { maSeries, bollingerSeries } = await import("@rotorsoft/portfolio-tracker-domain");
       const prices = await getTickerPrices(input.symbol, input.from);
       return {
         ma50: maSeries(prices, 50),

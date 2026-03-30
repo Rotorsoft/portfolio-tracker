@@ -1,6 +1,6 @@
 import { store } from "@rotorsoft/act";
 import { PostgresStore } from "@rotorsoft/act-pg";
-import { app, initDb, migrateDb, db } from "@portfolio-tracker/domain";
+import { app, initDb, migrateDb, db } from "@rotorsoft/portfolio-tracker-domain";
 import { sql } from "drizzle-orm";
 
 const DB_URL = process.env.DATABASE_URL ?? "postgres://postgres:postgres@localhost:5479/postgres";

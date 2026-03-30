@@ -1,5 +1,5 @@
 {
-  "name": "@portfolio-tracker/app",
+  "name": "@rotorsoft/portfolio-tracker-app",
   "type": "module",
   "version": "0.0.1",
   "scripts": {
@@ -9,7 +9,7 @@
     "start": "node dist/server.js"
   },
   "dependencies": {
-    "@portfolio-tracker/domain": "workspace:*",
+    "@rotorsoft/portfolio-tracker-domain": "workspace:*",
     "@rotorsoft/act": "^0.25.1",
     "@rotorsoft/act-pg": "^0.14.1",
     "@rotorsoft/act-sse": "^1.2.1",
