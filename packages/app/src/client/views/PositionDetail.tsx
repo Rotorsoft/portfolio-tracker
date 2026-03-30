@@ -416,7 +416,7 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, di
                 </tr>
               </thead>
               <tbody>
-                {(position.lots ?? []).map((lot) => {
+                {[...(position.lots ?? [])].sort((a, b) => a.transactionDate.localeCompare(b.transactionDate)).map((lot) => {
                   const a = entryMap.get(lot.id);
                   return (
                     <tr key={lot.id} className="border-b border-gray-800/50">
