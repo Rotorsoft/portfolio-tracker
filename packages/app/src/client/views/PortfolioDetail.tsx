@@ -454,7 +454,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                     className="border-b border-gray-800/50 hover:bg-gray-800/30 cursor-pointer transition-colors">
                     <td className="px-3 py-2">
                       <span className="font-medium text-white">{pos.ticker}</span>
-                      {pos.tickerName && <div className="text-[10px] text-gray-600 truncate max-w-[200px]">{pos.tickerName}</div>}
+                      {pos.tickerName && <div className="text-[10px] text-gray-600 truncate max-w-[100px]">{pos.tickerName}</div>}
                     </td>
                     <td className="px-3 py-2 text-right text-gray-300">{pos.totalShares.toLocaleString()}</td>
                     <td className="px-3 py-2 text-right text-gray-300">{fmt(pos.avgCostBasis)}</td>
