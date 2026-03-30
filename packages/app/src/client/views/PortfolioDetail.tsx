@@ -284,28 +284,41 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
         })()}
       </div>
 
-      {/* Tab actions */}
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-        <div />
-        {subTab === "positions" && !showAdd && (
-          <div className="flex gap-2">
-            <button onClick={() => setShowAdd("lots")} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><Plus size={12} /> Add Lots</button>
-            <button onClick={() => setShowAdd("positions")} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><Plus size={12} /> Add Tickers</button>
+      {/* Live quotes status bar */}
+      {(() => {
+        const target = lastTradingDate();
+        const marketOpen = isMarketOpen();
+        const refreshCount = quoteStats?.refreshCount ?? 0;
+        const nextUpdateIn = quotesUpdatedAt ? Math.max(0, 300_000 - (now - quotesUpdatedAt)) : 0;
+        const lastRefreshAgo = quoteStats?.lastRefreshTs ? now - quoteStats.lastRefreshTs : 0;
+        return (
+          <div className="flex items-center gap-2 px-3 py-1.5 mb-0 text-[10px]">
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-gray-300 font-medium">Live Quotes</span>
+              <span className="text-gray-600">every 5 min · next in {fmtCountdown(nextUpdateIn)}</span>
+            </div>
+            <div className="flex items-center gap-3 ml-2">
+              <div><span className="text-gray-600">Refreshes</span> <span className="text-gray-300 ml-0.5">{refreshCount}</span></div>
+              {lastRefreshAgo > 0 && <div><span className="text-gray-600">Last</span> <span className="text-gray-300 ml-0.5">{fmtCountdown(lastRefreshAgo)} ago</span></div>}
+              {autoBackfilling && <span className="flex items-center gap-0.5 text-amber-400"><RefreshCw size={8} className="animate-spin" /> Syncing...</span>}
+            </div>
+            {(() => { const mc = marketCountdown(); return (
+            <div className="ml-auto flex items-center gap-3">
+              <span className={marketOpen ? "text-emerald-400" : "text-gray-600"}>{marketOpen ? "Market open" : "Closed"} · {mc.label} {fmtCountdown(mc.ms)}</span>
+              <span><span className="text-gray-600">Last Close</span> <span className="text-gray-300 ml-0.5">{fmtDate(target)}</span></span>
+            </div>
+            ); })()}
           </div>
-        )}
-        {subTab === "prices" && (
-          <div className="flex gap-2 items-center">
-            {allFilled ? (
-              <span className="text-emerald-400 text-sm">&#10003; All filled</span>
-            ) : (
-              <button onClick={handleBackfillAll} disabled={anyLoading} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">
-                {backfillingAll ? "Backfilling..." : <><RefreshCw size={12} /> Backfill All</>}
-              </button>
-            )}
-            {autoBackfilling && <span className="text-[10px] text-gray-500 flex items-center gap-1"><RefreshCw size={10} className="animate-spin" /> Syncing daily prices...</span>}
-          </div>
-        )}
-      </div>
+        );
+      })()}
+
+      {subTab === "positions" && !showAdd && (
+        <div className="flex justify-end gap-2 my-auto py-1">
+          <button onClick={() => setShowAdd("lots")} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><Plus size={12} /> Add Lots</button>
+          <button onClick={() => setShowAdd("positions")} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><Plus size={12} /> Add Tickers</button>
+        </div>
+      )}
 
       {/* === Positions Tab === */}
       {subTab === "positions" && (
@@ -510,34 +523,6 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
       {/* === Price Data Tab === */}
       {subTab === "prices" && (
         <div className="space-y-4">
-          {/* Live quote status */}
-          {(() => {
-            const target = lastTradingDate();
-            const marketOpen = isMarketOpen();
-            const refreshCount = quoteStats?.refreshCount ?? 0;
-            const nextUpdateIn = quotesUpdatedAt ? Math.max(0, 300_000 - (now - quotesUpdatedAt)) : 0;
-            const lastRefreshAgo = quoteStats?.lastRefreshTs ? now - quoteStats.lastRefreshTs : 0;
-            return (
-              <div className="rounded-xl border border-gray-800 bg-gray-900 px-4 py-3 flex items-center">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="text-sm text-white font-medium">Live Quotes</span>
-                  <span className="text-xs text-gray-500">every 5 min · next in {fmtCountdown(nextUpdateIn)}</span>
-                </div>
-                <div className="flex items-center gap-5 text-xs ml-6">
-                  <div><span className="text-gray-500">Refreshes</span> <span className="text-white font-medium ml-1">{refreshCount}</span></div>
-                  {lastRefreshAgo > 0 && <div><span className="text-gray-500">Last</span> <span className="text-white font-medium ml-1">{fmtCountdown(lastRefreshAgo)} ago</span></div>}
-                  {autoBackfilling && <span className="flex items-center gap-1 text-amber-400"><RefreshCw size={10} className="animate-spin" /> Syncing...</span>}
-                </div>
-                {(() => { const mc = marketCountdown(); return (
-                <div className="ml-auto flex items-center gap-5 text-xs">
-                  <span className={marketOpen ? "text-emerald-400" : "text-gray-500"}>{marketOpen ? "Market open" : "Market closed"} · {mc.label} {fmtCountdown(mc.ms)}</span>
-                  <span><span className="text-gray-500">Last Close</span> <span className="text-white font-medium ml-1">{fmtDate(target)}</span></span>
-                </div>
-                ); })()}
-              </div>
-            );
-          })()}
           {(() => {
             const minDate = new Date(new Date(cutoffDate).getTime() - 365 * 86400000);
             const maxDate = new Date(today);
@@ -586,7 +571,16 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                       ))}
                     </div>
                   </div>
-                  <span className="text-sm text-white w-24 text-right font-medium">{fmtDate(effectiveBackfillFrom)}</span>
+                  <div className="text-right w-28 shrink-0">
+                    {allFilled ? (
+                      <span className="text-emerald-400 text-xs">&#10003; All filled</span>
+                    ) : (
+                      <button onClick={handleBackfillAll} disabled={anyLoading} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2 py-0.5 rounded text-xs font-medium disabled:opacity-50 inline-flex items-center gap-1">
+                        {backfillingAll ? "Backfilling..." : <><RefreshCw size={10} /> Backfill All</>}
+                      </button>
+                    )}
+                    <div className="text-xs text-gray-400 mt-0.5">{fmtDate(effectiveBackfillFrom)}</div>
+                  </div>
                 </div>
               </div>
             );
