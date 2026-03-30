@@ -9,8 +9,8 @@ export function WhatIfChart({ portfolioId, cutoffDate, onSelectTicker }: { portf
   useEffect(() => { if (cutoffDate) setWhatIfDate(cutoffDate); }, [cutoffDate]);
   const [wiSort, setWiSort] = useState<{ col: string; dir: "asc" | "desc" }>({ col: "absDiff", dir: "desc" });
   const { data, isLoading } = trpc.getWhatIfComparison.useQuery(
-    { portfolioId, whatIfDate, from: new Date(new Date(whatIfDate).getTime() - 7 * 86400000).toISOString().split("T")[0] },
-    { enabled: !!whatIfDate }
+    { portfolioId, whatIfDate, from: whatIfDate && !isNaN(new Date(whatIfDate).getTime()) ? new Date(new Date(whatIfDate).getTime() - 7 * 86400000).toISOString().split("T")[0] : whatIfDate },
+    { enabled: !!whatIfDate && !isNaN(new Date(whatIfDate).getTime()) }
   );
 
   const fmt = (n: number) => `$${(n / 1000).toFixed(1)}k`;
