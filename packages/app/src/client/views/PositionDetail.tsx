@@ -105,7 +105,7 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
   if (!position) return <div className="text-gray-500">Loading...</div>;
 
   const fmt = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
-  const glColor = (val: number) => val >= 0 ? "text-emerald-400" : "text-red-400";
+  const glColor = (val: number) => val > 0 ? "text-emerald-400" : val < 0 ? "text-red-400" : "text-gray-500";
   const S = {
     title: "text-base font-semibold tracking-wide mb-1.5 text-center",
     row: "flex gap-4 justify-center",
@@ -207,7 +207,11 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, on
               <div className="flex items-baseline gap-3">
                 <h2 className="text-lg font-semibold text-white">{position.ticker}</h2>
                 {currentPrice > 0 && <span className="text-2xl font-bold text-white">{fmt(currentPrice)}</span>}
-                {currentPrice > 0 && <span className={`text-sm font-medium ${glColor(unrealizedGL)}`}>{fmt(unrealizedGL)} ({Math.abs(glPct).toFixed(1)}%)</span>}
+                {currentPrice > 0 && (ti?.previousClose ?? 0) > 0 && (() => {
+                  const dayChange = currentPrice - ti!.previousClose;
+                  const dayPct = (dayChange / ti!.previousClose) * 100;
+                  return <span className={`text-sm font-medium ${glColor(dayChange)}`}>{dayChange >= 0 ? "+" : ""}{fmt(dayChange)} ({Math.abs(dayPct).toFixed(2)}%)</span>;
+                })()}
               </div>
               <button onClick={() => setShowAdd(!showAdd)} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium transition-colors flex items-center gap-1">
                 {showAdd ? <><X size={12} /> Cancel</> : <><Plus size={12} /> Add Lot</>}

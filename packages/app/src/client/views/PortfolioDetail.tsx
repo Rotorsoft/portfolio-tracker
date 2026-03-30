@@ -43,10 +43,13 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
     else { setSortCol(col); setSortDir(col === "ticker" ? "asc" : "desc"); }
   };
 
+  const { data: allTickerData } = trpc.getTickers.useQuery();
   const getSortVal = (pos: any, col: string) => {
     if (col === "pe") return bulkFundamentals?.[pos.ticker]?.trailingPE ?? 0;
     if (col === "yield") return bulkFundamentals?.[pos.ticker]?.dividendYield ?? 0;
+    if (col === "volatility") return allTickerData?.find((t: any) => t.symbol === pos.ticker)?.volatility30d ?? 0;
     if (col === "entryGrade") return pos.entryGradeScore ?? 0;
+    if (col === "signal") return pos.compositeScore ?? 0;
     return pos[col] ?? 0;
   };
   const sortedPositions = [...(summary?.positions ?? [])].sort((a, b) => {
@@ -68,7 +71,6 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
   const cutoffDate = portfolio?.cutoffDate || "2024-01-01";
   const [backfillStatus, setBackfillStatus] = useState<Record<string, { loading: boolean; result?: string }>>({});
   const [backfillingAll, setBackfillingAll] = useState(false);
-  const [recomputing, setRecomputing] = useState(false);
   const recomputeMutation = trpc.recomputeAllIndicators.useMutation();
   const [backfillFrom, setBackfillFrom] = useState<string | null>(null);
   const effectiveBackfillFrom = backfillFrom ?? cutoffDate;
@@ -158,21 +160,42 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
     setBackfillingAll(true);
     const tickerList = positions?.map((p) => p.ticker).filter(Boolean) ?? [];
     for (const t of tickerList) await handleBackfill(t);
+    // Auto-recompute signals after backfill
+    await recomputeMutation.mutateAsync();
+    utils.getPortfolioSummary.invalidate();
+    utils.getPosition.invalidate();
     setBackfillingAll(false);
   };
-  const handleRecompute = async () => {
-    setRecomputing(true);
-    try {
-      await recomputeMutation.mutateAsync();
-      utils.getPortfolioSummary.invalidate();
-      utils.getTickers.invalidate();
-      utils.getPosition.invalidate();
-    } finally {
-      setRecomputing(false);
-    }
+  const lastTradingDate = () => {
+    const now = new Date();
+    const d = new Date(now);
+    // If before market close (4pm ET / 20:00 UTC), use previous day
+    const utcHour = now.getUTCHours();
+    if (utcHour < 21) d.setDate(d.getDate() - 1); // market hasn't closed yet
+    // Skip weekends
+    const day = d.getDay();
+    if (day === 0) d.setDate(d.getDate() - 2); // Sunday → Friday
+    if (day === 6) d.setDate(d.getDate() - 1); // Saturday → Friday
+    return d.toISOString().split("T")[0];
   };
-  const anyLoading = backfillingAll || recomputing || Object.values(backfillStatus).some((s) => s.loading);
-  const { data: allTickerData } = trpc.getTickers.useQuery();
+  const [refreshing, setRefreshing] = useState(false);
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    const date = lastTradingDate();
+    const tickerList = positions?.map((p) => p.ticker).filter(Boolean) ?? [];
+    for (const t of tickerList) {
+      try {
+        await backfillMutation.mutateAsync({ symbol: t, fromDate: date, toDate: date });
+      } catch {}
+    }
+    await recomputeMutation.mutateAsync();
+    utils.getTickers.invalidate();
+    utils.getTicker.invalidate();
+    utils.getPortfolioSummary.invalidate();
+    utils.getPosition.invalidate();
+    setRefreshing(false);
+  };
+  const anyLoading = backfillingAll || refreshing || Object.values(backfillStatus).some((s) => s.loading);
   const { data: priceRange } = trpc.getPriceDateRange.useQuery();
   const recentCutoff = new Date(new Date(today).getTime() - 3 * 86400000).toISOString().split("T")[0];
   const allFilled = positions && positions.length > 0 && positions.every((p) => {
@@ -192,7 +215,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
     );
   }
 
-  const glColor = (val: number) => val >= 0 ? "text-emerald-400" : "text-red-400";
+  const glColor = (val: number) => val > 0 ? "text-emerald-400" : val < 0 ? "text-red-400" : "text-gray-500";
   const fmt = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
   const fmtPct = (n: number) => `${Math.abs(n).toFixed(2)}%`;
 
@@ -274,8 +297,8 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                 {backfillingAll ? "Backfilling..." : <><RefreshCw size={12} /> Backfill All</>}
               </button>
             )}
-            <button onClick={handleRecompute} disabled={recomputing} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">
-              {recomputing ? "Recomputing..." : <><RefreshCw size={12} /> Recompute Signals</>}
+            <button onClick={handleRefresh} disabled={anyLoading || refreshing} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">
+              {refreshing ? "Refreshing..." : <><RefreshCw size={12} /> Refresh Today</>}
             </button>
           </div>
         )}
@@ -336,7 +359,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
           )}
 
           <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-x-auto">
-            <table className="w-full text-xs">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-800">
                   {[
@@ -356,36 +379,18 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                       {col.label}{sortCol === col.key ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
                     </th>
                   ))}
-                  <th onClick={() => toggleSort("timingScore")}
-                    className="text-center px-3 py-2 text-xs text-gray-500 uppercase cursor-pointer hover:text-gray-300 select-none whitespace-nowrap">
-                    Timing{sortCol === "timingScore" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+                  <th onClick={() => toggleSort("volatility")}
+                    className="text-right px-3 py-2 text-xs text-gray-500 uppercase cursor-pointer hover:text-gray-300 select-none whitespace-nowrap">
+                    Risk{sortCol === "volatility" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
                     <InfoTip>
                       <div className="space-y-1.5">
-                        <div className="text-gray-300 font-medium">Entry timing score</div>
+                        <div className="text-gray-300 font-medium">Risk (30-day Volatility)</div>
+                        <div className="text-gray-400 text-[11px] leading-tight">Annualized standard deviation of daily returns over 30 days. Higher % = larger daily price swings = more risk.</div>
                         <table className="font-mono text-[11px]">
                           <tbody>
-                            <tr><td className="text-emerald-400 pr-2 text-right">100%</td><td>bought at period low</td></tr>
-                            <tr><td className="text-emerald-400 pr-2 text-right">66%+</td><td>great timing</td></tr>
-                            <tr><td className="text-amber-400 pr-2 text-right">33%+</td><td>average timing</td></tr>
-                            <tr><td className="text-red-400 pr-2 text-right">&lt;33%</td><td>poor timing</td></tr>
-                            <tr><td className="text-red-400 pr-2 text-right">0%</td><td>bought at period high</td></tr>
-                          </tbody>
-                        </table>
-                      </div>
-                    </InfoTip>
-                  </th>
-                  <th onClick={() => toggleSort("dcaSavingsPct")}
-                    className="text-center px-3 py-2 text-xs text-gray-500 uppercase cursor-pointer hover:text-gray-300 select-none whitespace-nowrap">
-                    vs DCA{sortCol === "dcaSavingsPct" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
-                    <InfoTip>
-                      <div className="space-y-1.5">
-                        <div className="text-gray-300 font-medium">vs Dollar-Cost Averaging</div>
-                        <div className="text-gray-400 text-[11px] leading-tight">Your entries vs buying daily from first to last lot</div>
-                        <table className="font-mono text-[11px]">
-                          <tbody>
-                            <tr><td className="text-emerald-400 pr-2 text-right">+2%</td><td>you beat DCA by 2%</td></tr>
-                            <tr><td className="text-gray-400 pr-2 text-right">0%</td><td>same as DCA</td></tr>
-                            <tr><td className="text-red-400 pr-2 text-right">-3%</td><td>DCA was 3% cheaper</td></tr>
+                            <tr><td className="text-emerald-400 pr-2 text-right">&lt;15%</td><td>low risk (stable)</td></tr>
+                            <tr><td className="text-amber-400 pr-2 text-right">15–30%</td><td>moderate risk</td></tr>
+                            <tr><td className="text-red-400 pr-2 text-right">&gt;30%</td><td>high risk (volatile)</td></tr>
                           </tbody>
                         </table>
                       </div>
@@ -393,7 +398,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                   </th>
                   <th onClick={() => toggleSort("entryGrade")}
                     className="text-center px-3 py-2 text-xs text-gray-500 uppercase cursor-pointer hover:text-gray-300 select-none whitespace-nowrap">
-                    Grade{sortCol === "entryGrade" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+                    Entry{sortCol === "entryGrade" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
                     <InfoTip>
                       <div className="space-y-1.5">
                         <div className="text-gray-300 font-medium">Entry Grade</div>
@@ -453,7 +458,10 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                   <tr key={pos.ticker} onClick={() => nav.toPosition(portfolioId, pos.ticker)}
                     className="border-b border-gray-800/50 hover:bg-gray-800/30 cursor-pointer transition-colors">
                     <td className="px-3 py-2">
-                      <span className="font-medium text-white">{pos.ticker}</span>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="font-medium text-white">{pos.ticker}</span>
+                        {(() => { const pc = allTickerData?.find((t) => t.symbol === pos.ticker)?.previousClose ?? 0; if (pc <= 0) return null; const chg = pos.currentPrice - pc; const pct = (chg / pc) * 100; return <span className={`text-[10px] font-medium ${chg > 0 ? "text-emerald-400" : chg < 0 ? "text-red-400" : "text-gray-500"}`}>{chg >= 0 ? "+" : ""}{pct.toFixed(1)}%</span>; })()}
+                      </div>
                       {pos.tickerName && <div className="text-[10px] text-gray-600 truncate max-w-[100px]">{pos.tickerName}</div>}
                     </td>
                     <td className="px-3 py-2 text-right text-gray-300">{pos.totalShares.toLocaleString()}</td>
@@ -463,20 +471,9 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                     <td className={`px-3 py-2 text-right font-medium ${glColor(pos.unrealizedGL)}`}>{fmt(pos.unrealizedGL)}</td>
                     <td className={`px-3 py-2 text-right font-medium ${glColor(pos.unrealizedGLPercent)}`}>{fmtPct(pos.unrealizedGLPercent)}</td>
                     <td className="px-3 py-2 text-right text-gray-500">{pos.lots}</td>
-                    <td className="px-3 py-2 text-right text-gray-300 text-xs">{bulkFundamentals?.[pos.ticker]?.trailingPE?.toFixed(1) ?? "—"}</td>
-                    <td className="px-3 py-2 text-right text-gray-300 text-xs">{(() => { const dy = bulkFundamentals?.[pos.ticker]?.dividendYield; return dy != null ? `${(dy * 100).toFixed(2)}%` : "—"; })()}</td>
-                    <td className="px-3 py-2">
-                      <div className="flex items-center justify-center gap-1">
-                        <div className="w-12 h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                          <div className={`h-full rounded-full ${
-                            pos.timingScore >= 66 ? "bg-emerald-500" : pos.timingScore >= 33 ? "bg-amber-500" : "bg-red-500"
-                          }`} style={{ width: `${pos.timingScore}%` }} />
-                        </div>
-                      </div>
-                    </td>
-                    <td className={`px-3 py-2 text-center text-xs font-medium ${pos.dcaSavingsPct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                      {Math.abs(pos.dcaSavingsPct).toFixed(1)}%
-                    </td>
+                    <td className="px-3 py-2 text-right text-gray-300">{bulkFundamentals?.[pos.ticker]?.trailingPE?.toFixed(1) ?? "—"}</td>
+                    <td className="px-3 py-2 text-right text-gray-300">{(() => { const dy = bulkFundamentals?.[pos.ticker]?.dividendYield; return dy != null ? `${(dy * 100).toFixed(2)}%` : "—"; })()}</td>
+                    {(() => { const v = allTickerData?.find((t) => t.symbol === pos.ticker)?.volatility30d ?? 0; return <td className={`px-3 py-2 text-right ${v > 30 ? "text-red-400" : v > 15 ? "text-amber-400" : "text-emerald-400"}`}>{v.toFixed(1)}%</td>; })()}
                     <td className="px-3 py-2 text-center">
                       <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
                         pos.entryGrade === "A" ? "bg-emerald-500/20 text-emerald-400" :
@@ -494,6 +491,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                         pos.signal === "sell" ? "bg-red-500/10 text-red-400" :
                         "bg-gray-700 text-gray-400"
                       }`}>{pos.signal?.toUpperCase()}</span>
+                      <span className="text-[10px] text-gray-600 ml-1">{pos.compositeScore.toFixed(2)}</span>
                     </td>
                   </tr>
                 ))}

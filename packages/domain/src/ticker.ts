@@ -16,6 +16,7 @@ export type TickerView = {
   firstPriceDate: string;
   lastPriceDate: string;
   lastClose: number;
+  previousClose: number;
   ma50: number;
   ma200: number;
   volatility30d: number;
@@ -158,7 +159,7 @@ export async function upsertTickerFundamentals(symbol: string, data: Omit<Fundam
 export async function backfillPrices(
   symbol: string,
   newPrices: PriceRecord[],
-  meta?: { name?: string; exchange?: string }
+  meta?: { name?: string; exchange?: string; previousClose?: number | null }
 ) {
   const sym = symbol.toUpperCase();
 
@@ -222,6 +223,7 @@ export async function backfillPrices(
   }
   if (meta?.name) updates.name = meta.name;
   if (meta?.exchange) updates.exchange = meta.exchange;
+  if (meta?.previousClose != null) updates.previousClose = meta.previousClose;
 
   // Technical indicators
   if (allPrices.length > 0) {

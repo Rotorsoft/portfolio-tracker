@@ -81,6 +81,7 @@ export const tickers = pgTable("tickers", {
   firstPriceDate: text("first_price_date").notNull().default(""),
   lastPriceDate: text("last_price_date").notNull().default(""),
   lastClose: real("last_close").notNull().default(0),
+  previousClose: real("previous_close").notNull().default(0),
   registeredAt: text("registered_at").notNull().default(""),
   // Technical indicators (computed on backfill)
   ma50: real("ma50").notNull().default(0),

@@ -34,6 +34,7 @@ export async function fetchPrices(
     name: result.meta?.longName || result.meta?.shortName || "",
     exchange: result.meta?.exchangeName || result.meta?.fullExchangeName || "",
     currency: result.meta?.currency || "",
+    previousClose: result.meta?.chartPreviousClose ?? result.meta?.previousClose ?? null as number | null,
   };
 
   const timestamps: number[] = result.timestamp ?? [];
