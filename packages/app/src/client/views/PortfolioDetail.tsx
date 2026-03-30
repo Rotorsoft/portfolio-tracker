@@ -229,12 +229,41 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
 
   return (
     <div>
-      <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-300 mb-4 flex items-center gap-1">
-        <ArrowLeft size={14} /> Back to portfolios
-      </button>
+      <div className="flex items-center justify-between mb-4">
+        <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-300 flex items-center gap-1">
+          <ArrowLeft size={14} /> Back to portfolios
+        </button>
+        {(() => {
+          const target = lastTradingDate();
+          const marketOpen = isMarketOpen();
+          const refreshCount = quoteStats?.refreshCount ?? 0;
+          const nextUpdateIn = quotesUpdatedAt ? Math.max(0, 300_000 - (now - quotesUpdatedAt)) : 0;
+          const lastRefreshAgo = quoteStats?.lastRefreshTs ? now - quoteStats.lastRefreshTs : 0;
+          return (
+            <div className="flex items-center gap-2 text-[10px]">
+              <div className="flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-gray-300 font-medium">Live Quotes</span>
+                <span className="text-gray-600">every 5 min · next in {fmtCountdown(nextUpdateIn)}</span>
+              </div>
+              <div className="flex items-center gap-3 ml-2">
+                <div><span className="text-gray-600">Refreshes</span> <span className="text-gray-300 ml-0.5">{refreshCount}</span></div>
+                {lastRefreshAgo > 0 && <div><span className="text-gray-600">Last</span> <span className="text-gray-300 ml-0.5">{fmtCountdown(lastRefreshAgo)} ago</span></div>}
+                {autoBackfilling && <span className="flex items-center gap-0.5 text-amber-400"><RefreshCw size={8} className="animate-spin" /> Syncing...</span>}
+              </div>
+              {(() => { const mc = marketCountdown(); return (
+              <div className="flex items-center gap-3 ml-2">
+                <span className={marketOpen ? "text-emerald-400" : "text-gray-600"}>{marketOpen ? "Market open" : "Closed"} · {mc.label} {fmtCountdown(mc.ms)}</span>
+                <span><span className="text-gray-600">Last Close</span> <span className="text-gray-300 ml-0.5">{fmtDate(target)}</span></span>
+              </div>
+              ); })()}
+            </div>
+          );
+        })()}
+      </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <div>
             <h2 className="text-xl font-semibold text-white">{portfolio?.name}</h2>
             <p className="text-xs text-gray-500">
@@ -243,22 +272,22 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
               {cutoffDate && <> &middot; Since {fmtDate(cutoffDate)}</>}
             </p>
           </div>
-          <Tooltip label="Portfolio settings">
-            <button onClick={() => setShowSettings(true)} className="text-gray-500 hover:text-gray-300 transition-colors">
-              <Settings size={16} />
+          <nav className="flex gap-0.5 ml-2">
+            {subTabs.map((t) => (
+              <button key={t.id} onClick={() => setSubTab(t.id)}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors flex items-center gap-1 ${
+                  subTab === t.id ? "bg-gray-800 text-white" : "text-gray-500 hover:text-white hover:bg-gray-800/50"
+                }`}>
+                {t.icon} {t.label}
+              </button>
+            ))}
+          </nav>
+          <Tooltip label="Settings">
+            <button onClick={() => setShowSettings(true)} className="text-gray-600 hover:text-gray-300 transition-colors ml-1">
+              <Settings size={14} />
             </button>
           </Tooltip>
         </div>
-        <nav className="flex gap-1">
-          {subTabs.map((t) => (
-            <button key={t.id} onClick={() => setSubTab(t.id)}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${
-                subTab === t.id ? "bg-gray-800 text-white" : "text-gray-500 hover:text-white hover:bg-gray-800/50"
-              }`}>
-              {t.icon} {t.label}
-            </button>
-          ))}
-        </nav>
         {summary && (() => {
           const live = livePortfolioTotals(summary.positions, liveQuotes);
           return (
@@ -284,34 +313,6 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
         })()}
       </div>
 
-      {/* Live quotes status bar */}
-      {(() => {
-        const target = lastTradingDate();
-        const marketOpen = isMarketOpen();
-        const refreshCount = quoteStats?.refreshCount ?? 0;
-        const nextUpdateIn = quotesUpdatedAt ? Math.max(0, 300_000 - (now - quotesUpdatedAt)) : 0;
-        const lastRefreshAgo = quoteStats?.lastRefreshTs ? now - quoteStats.lastRefreshTs : 0;
-        return (
-          <div className="flex items-center gap-2 px-3 py-1.5 mb-0 text-[10px]">
-            <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-gray-300 font-medium">Live Quotes</span>
-              <span className="text-gray-600">every 5 min · next in {fmtCountdown(nextUpdateIn)}</span>
-            </div>
-            <div className="flex items-center gap-3 ml-2">
-              <div><span className="text-gray-600">Refreshes</span> <span className="text-gray-300 ml-0.5">{refreshCount}</span></div>
-              {lastRefreshAgo > 0 && <div><span className="text-gray-600">Last</span> <span className="text-gray-300 ml-0.5">{fmtCountdown(lastRefreshAgo)} ago</span></div>}
-              {autoBackfilling && <span className="flex items-center gap-0.5 text-amber-400"><RefreshCw size={8} className="animate-spin" /> Syncing...</span>}
-            </div>
-            {(() => { const mc = marketCountdown(); return (
-            <div className="ml-auto flex items-center gap-3">
-              <span className={marketOpen ? "text-emerald-400" : "text-gray-600"}>{marketOpen ? "Market open" : "Closed"} · {mc.label} {fmtCountdown(mc.ms)}</span>
-              <span><span className="text-gray-600">Last Close</span> <span className="text-gray-300 ml-0.5">{fmtDate(target)}</span></span>
-            </div>
-            ); })()}
-          </div>
-        );
-      })()}
 
       {subTab === "positions" && !showAdd && (
         <div className="flex justify-end gap-2 my-auto py-1">

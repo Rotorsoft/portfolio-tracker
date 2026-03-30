@@ -1,4 +1,5 @@
-import { LogOut, Briefcase, ScrollText } from "lucide-react";
+import { LogOut, Terminal } from "lucide-react";
+import { Tooltip } from "./Tooltip.js";
 import { useAuth } from "../hooks/useAuth.js";
 import { useEventStream } from "../hooks/useEventStream.js";
 import { useNav } from "../hooks/useNav.js";
@@ -8,14 +9,10 @@ import { PortfolioList } from "../views/PortfolioList.js";
 import { PortfolioDetail } from "../views/PortfolioDetail.js";
 import { EventLog } from "../views/EventLog.js";
 
-const navTabs = [
-  { id: "portfolios" as const, label: "Portfolios", icon: <Briefcase size={14} /> },
-  { id: "events" as const, label: "Events", icon: <ScrollText size={14} /> },
-];
 
 export function Shell() {
   const { user, loading, signOut } = useAuth();
-  const { events, connected } = useEventStream();
+  const { events } = useEventStream();
   const serverDown = useServerDown();
   const { route, nav } = useNav();
 
@@ -56,37 +53,23 @@ export function Shell() {
       <header className="border-b border-gray-800 bg-gray-900/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-14">
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-2">
-                <svg viewBox="0 0 32 32" className="w-7 h-7">
-                  <rect width="32" height="32" rx="6" fill="#1e1b4b"/>
-                  <path d="M6 22 L12 14 L17 18 L26 8" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-                  <path d="M6 22 L12 14 L17 18 L26 8 L26 22 Z" fill="#6366f1" fillOpacity="0.15"/>
-                  <circle cx="26" cy="8" r="2" fill="#10b981"/>
-                </svg>
-                <h1 className="text-lg font-semibold tracking-tight text-white hidden sm:block">
-                  Portfolio Tracker
-                </h1>
-              </div>
-              <nav className="flex gap-1">
-                {navTabs.map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => t.id === "portfolios" ? nav.toPortfolios() : nav.toEvents()}
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${
-                      activeTab === t.id ? "bg-indigo-600 text-white" : "text-gray-400 hover:text-white hover:bg-gray-800"
-                    }`}
-                  >
-                    {t.icon} {t.label}
-                  </button>
-                ))}
-              </nav>
-            </div>
+            <button onClick={() => nav.toPortfolios()} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+              <svg viewBox="0 0 32 32" className="w-7 h-7">
+                <rect width="32" height="32" rx="6" fill="#1e1b4b"/>
+                <path d="M6 22 L12 14 L17 18 L26 8" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                <path d="M6 22 L12 14 L17 18 L26 8 L26 22 Z" fill="#6366f1" fillOpacity="0.15"/>
+                <circle cx="26" cy="8" r="2" fill="#10b981"/>
+              </svg>
+              <h1 className="text-lg font-semibold tracking-tight text-white hidden sm:block">
+                Portfolio Tracker
+              </h1>
+            </button>
             <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 text-sm">
-                <span className={`w-2 h-2 rounded-full ${connected ? "bg-emerald-400" : "bg-red-400"}`} />
-                <span className="text-gray-500">{connected ? "Live" : "Disconnected"}</span>
-              </div>
+              <Tooltip label="Event log">
+                <button onClick={() => nav.toEvents()} className={`text-gray-600 hover:text-gray-300 transition-colors ${activeTab === "events" ? "text-gray-300" : ""}`}>
+                  <Terminal size={14} />
+                </button>
+              </Tooltip>
               <span className="text-sm text-gray-400">{user.name}</span>
               <button onClick={signOut} className="text-sm text-gray-500 hover:text-gray-300 transition-colors inline-flex items-center gap-1">
                 <LogOut size={14} /> Sign out
