@@ -38,15 +38,20 @@ portfolio-tracker/
 
 ### Technical Analysis
 - **Composite Signal System** -- weighted score from RSI, MACD, Bollinger Bands, MA trend, momentum, and volume
-- **Entry Grading** (A-F) -- evaluates each buy lot against RSI, Bollinger position, MA trend, price timing, and volume at time of purchase
-- **Chart Overlays** -- MA50, MA200, Bollinger Bands on price charts
+- **Entry Grading** (A-F) -- 3-factor model based on Minervini/O'Neil trend-following methodology:
+  - **Trend (40%)** -- MA50 > MA200 (golden cross), price above MA50, MA50 rising
+  - **Value (30%)** -- entry price relative to MA50 support and Bollinger band position
+  - **Timing (30%)** -- RSI pullback zone (30-50 ideal) and position within recent range
+- **Chart Overlays** -- MA50, MA200, Bollinger Bands with range presets (1M/3M/6M/1Y/ALL)
 - **Intraday Alerts** -- detects live price crossing MA50/MA200 or big daily moves (3%+)
+- **Major Index Marquee** -- DOW, S&P 500, NASDAQ scrolling ticker with live/closed indicator
 
 ### Position Analytics
 - Timing score (where your entry sits in the price range)
 - DCA comparison (your actual cost vs. dollar-cost averaging)
 - Max drawdown and days underwater
-- 52-week range position
+- 52-week range bar with avg cost tick and color-coded current price
+- Lot-chart interaction (hover lot row to highlight on price chart)
 - Entry vs MA50 at time of purchase
 
 ### Avg-Down Opportunities
@@ -182,7 +187,7 @@ All indicator functions are pure (no side effects) and tested independently:
 - `volumeRatio(prices)` -- Current vs average volume
 - `volatility30d(prices)` -- 30-day annualized volatility
 - `computeCompositeSignal(prices)` -- Weighted composite (strong buy/buy/hold/sell/strong sell)
-- `computeEntryGrade(prices, entryPrice, entryDate)` -- Entry quality (A-F)
+- `computeEntryGrade(prices, entryPrice, entryDate)` -- Entry quality (A-F) using Trend/Value/Timing
 
 ## API Endpoints
 
