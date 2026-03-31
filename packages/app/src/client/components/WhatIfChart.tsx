@@ -24,12 +24,11 @@ export function WhatIfChart({ portfolioId, cutoffDate, onSelectTicker }: { portf
           </h3>
           <DateInput value={whatIfDate} onChange={setWhatIfDate} />
         </div>
-        {data && data.positions.length > 0 && (() => {
-          const totalActual = data.positions.reduce((s, p) => s + p.actualCost, 0);
+        {data && data.timeline.length > 0 && (() => {
+          const last = data.timeline.at(-1)!;
           const totalWhatIf = data.positions.reduce((s, p) => s + p.whatIfCost, 0);
-          const last = data.timeline.at(-1);
-          const actualGL = (last?.actualValue ?? 0) - totalActual;
-          const whatIfGL = (last?.whatIfValue ?? 0) - totalWhatIf;
+          const whatIfGL = last.whatIfGL;
+          const actualGL = last.actualGL;
           const advantage = actualGL - whatIfGL;
           return (
             <div className="flex items-start gap-5 text-right">

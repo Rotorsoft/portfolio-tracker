@@ -1,1 +1,12 @@
 @import "tailwindcss";
+
+@keyframes marquee {
+  0% { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(-33.333%, 0, 0); }
+}
+.marquee-scroll {
+  animation: marquee 30s linear infinite;
+}
+.marquee-scroll:hover {
+  animation-play-state: paused;
+}

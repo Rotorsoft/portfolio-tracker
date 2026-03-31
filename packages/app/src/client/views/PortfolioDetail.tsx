@@ -1,17 +1,19 @@
-import { useState, useEffect, useRef } from "react";
-import { Plus, X, RefreshCw, Trash2, Settings, LayoutList, BarChart3, Database, ExternalLink } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Plus, RefreshCw, Settings, LayoutList, BarChart3, Database, ExternalLink } from "lucide-react";
 import { BackButton } from "../components/BackButton.js";
 import { Tooltip } from "../components/Tooltip.js";
 import { trpc } from "../trpc.js";
 import { useNav, type SubTab } from "../hooks/useNav.js";
 import { PositionDetail } from "./PositionDetail.js";
-import { DateInput } from "../components/DateInput.js";
 import { WhatIfChart } from "../components/WhatIfChart.js";
 import { PortfolioSettings } from "../components/PortfolioSettings.js";
 import { fmtDate, fmtMonthYear, fmtUsd, fmtUsdAbs, fmtPctAbs, glColor } from "../fmt.js";
 import { getLivePrice, getLiveAlerts, livePortfolioTotals, livePortfolioDayChange, livePositionGL, liveDayChange, avgDownOpportunity, avgDownColor, volatilityColor, gradeColor, signalColor, fmtDividendYield, lastTradingDate, pendingBackfillTickers, shouldPollQuotes } from "../live.js";
 import { InfoTip } from "../components/InfoTip.js";
 import { MarketMarquee } from "../components/MarketMarquee.js";
+import { AddTickersForm, AddLotsForm } from "../components/AddForms.js";
+import { Modal } from "../components/Modal.js";
+import { FiftyTwoWeekBar } from "../components/FiftyTwoWeekBar.js";
 
 
 type Props = {
@@ -28,8 +30,6 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
     { enabled: tickers_list.length > 0, staleTime: 5 * 60 * 1000 },
   );
   const { data: positions } = trpc.getPositionsByPortfolio.useQuery({ portfolioId });
-  const openMutation = trpc.openPosition.useMutation();
-  const addLotMutation = trpc.addLot.useMutation();
   const backfillMutation = trpc.requestBackfill.useMutation();
   const utils = trpc.useUtils();
 
@@ -38,6 +38,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
   const setSubTab = (tab: SubTab) => nav.toPortfolio(portfolioId, tab);
   const [showSettings, setShowSettings] = useState(false);
   const [showAdd, setShowAdd] = useState<false | "positions" | "lots">(false);
+  const closeAdd = useCallback(() => setShowAdd(false), []);
   const [sortCol, setSortCol] = useState<string>("marketValue");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
@@ -50,7 +51,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
   const tickerSymbols = positions?.map((p) => p.ticker).filter(Boolean) ?? [];
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
+    const id = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(id);
   }, []);
   const polling = shouldPollQuotes();
@@ -76,14 +77,6 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
     const cmp = typeof av === "string" ? av.localeCompare(bv) : av - bv;
     return sortDir === "asc" ? cmp : -cmp;
   });
-  const [tickers, setTickers] = useState("");
-  const [adding, setAdding] = useState(false);
-
-  // Lot grid state
-  type LotRow = { ticker: string; type: "buy" | "sell"; quantity: string; price: string; fees: string; notes: string };
-  const emptyRow = (): LotRow => ({ ticker: "", type: "buy", quantity: "", price: "", fees: "0", notes: "" });
-  const [lotDate, setLotDate] = useState(new Date().toISOString().split("T")[0]);
-  const [lotRows, setLotRows] = useState<LotRow[]>([emptyRow(), emptyRow(), emptyRow()]);
 
   // Backfill state
   const cutoffDate = portfolio?.cutoffDate || "2024-01-01";
@@ -108,51 +101,6 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
     return Math.max(1, count);
   };
 
-  const updateRow = (i: number, field: keyof LotRow, value: string) => {
-    setLotRows((rows) => rows.map((r, idx) => idx === i ? { ...r, [field]: value } : r));
-  };
-
-  const handleAddPositions = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const symbols = tickers.split(/[\s,;]+/).map((s) => s.trim().toUpperCase()).filter(Boolean);
-    if (symbols.length === 0) return;
-    setAdding(true);
-    for (const symbol of symbols) {
-      try { await openMutation.mutateAsync({ portfolioId, ticker: symbol }); } catch { /* skip */ }
-    }
-    utils.getPositionsByPortfolio.invalidate();
-    utils.getPortfolioSummary.invalidate();
-    utils.getTickers.invalidate();
-    setAdding(false);
-    setShowAdd(false);
-    setTickers("");
-  };
-
-  const handleSubmitLots = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const validRows = lotRows.filter((r) => r.ticker.trim() && Number(r.quantity) > 0 && Number(r.price) > 0);
-    if (validRows.length === 0) return;
-    setAdding(true);
-    const uniqueTickers = new Set(validRows.map((r) => r.ticker.trim().toUpperCase()));
-    for (const sym of uniqueTickers) {
-      try { await openMutation.mutateAsync({ portfolioId, ticker: sym }); } catch { /* already open */ }
-    }
-    for (const row of validRows) {
-      try {
-        await addLotMutation.mutateAsync({
-          portfolioId, ticker: row.ticker.trim().toUpperCase(),
-          lot: { id: `lot-${crypto.randomUUID().slice(0, 8)}`, type: row.type, transaction_date: lotDate, quantity: Number(row.quantity), price: Number(row.price), fees: Number(row.fees || 0), notes: row.notes },
-        });
-      } catch (err) { console.error(`Failed lot for ${row.ticker}:`, err); }
-    }
-    utils.getPositionsByPortfolio.invalidate();
-    utils.getPortfolioSummary.invalidate();
-    utils.getTickers.invalidate();
-    setAdding(false);
-    setShowAdd(false);
-    setLotDate(new Date().toISOString().split("T")[0]);
-    setLotRows([emptyRow(), emptyRow(), emptyRow()]);
-  };
 
   const handleBackfill = async (symbol: string) => {
     setBackfillStatus((s) => ({ ...s, [symbol]: { loading: true } }));
@@ -429,31 +377,10 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                       const fund = bulkFundamentals?.[pos.ticker];
                       const lo = fund?.fiftyTwoWeekLow ?? 0;
                       const hi = fund?.fiftyTwoWeekHigh ?? 0;
-                      const range = hi - lo;
-                      const pct52 = range > 0 ? ((price - lo) / range) * 100 : 50;
                       return <>
                         <td className={`px-3 py-2 text-right ${glColor(day.chg)}`}>{fmtUsd(price)}<div className="text-[10px]">{pc > 0 ? fmtPctAbs(day.pct) : ""}</div></td>
                         <td className="px-3 py-2">
-                          {lo > 0 && hi > 0 ? (
-                            <div className="flex flex-col items-center gap-0.5">
-                              <div className="flex items-center justify-between w-full text-[9px] text-gray-600">
-                                <span>{fmtUsd(lo)}</span>
-                                <span>{fmtUsd(hi)}</span>
-                              </div>
-                              {(() => {
-                                const costPct = range > 0 ? ((pos.avgCostBasis - lo) / range) * 100 : 50;
-                                return (
-                              <div className="relative w-full h-1.5 bg-gray-800 rounded-full">
-                                <div className="absolute top-0 left-0 h-full bg-gray-700 rounded-full" style={{ width: `${Math.min(100, Math.max(0, pct52))}%` }} />
-                                {pos.avgCostBasis >= lo && pos.avgCostBasis <= hi && (
-                                  <div className="absolute w-[2px] bg-yellow-200/70 z-10" style={{ left: `${Math.min(100, Math.max(0, costPct))}%`, top: "-3px", bottom: "-3px", transform: "translateX(-50%)" }} />
-                                )}
-                                <div className={`absolute w-2 h-2 rounded-full shadow ${day.chg > 0 ? "bg-emerald-400" : day.chg < 0 ? "bg-red-400" : "bg-gray-400"}`} style={{ left: `calc(${Math.min(100, Math.max(0, pct52))}% - 4px)`, top: "-1.25px" }} />
-                              </div>
-                                );
-                              })()}
-                            </div>
-                          ) : <span className="text-gray-600">—</span>}
+                          <FiftyTwoWeekBar low={lo} high={hi} current={price} avgCost={pos.avgCostBasis} dayChange={day.chg} />
                         </td>
                         <td className="px-3 py-2 text-right text-gray-300">{fmtUsd(posGL.mv)}</td>
                         <td className={`px-3 py-2 text-right font-medium ${glColor(posGL.gl)}`}>{fmtUsdAbs(posGL.gl)}</td>
@@ -488,61 +415,16 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
               <p className="text-gray-600 text-center py-8">No positions yet.</p>
             )}
           </div>
-          {!showAdd && (
-            <div className="flex justify-end gap-2 mt-2">
-              <button onClick={() => setShowAdd("lots")} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><Plus size={12} /> Add Lots</button>
-              <button onClick={() => setShowAdd("positions")} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><Plus size={12} /> Add Tickers</button>
-            </div>
-          )}
-          {showAdd === "positions" && (
-            <form onSubmit={handleAddPositions} className="bg-gray-900 border border-gray-800 rounded-xl p-4 mt-2 flex flex-wrap gap-3">
-              <input type="text" placeholder="Ticker symbols (e.g. AAPL, MSFT, GOOG)" value={tickers} onChange={(e) => setTickers(e.target.value)} autoFocus
-                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" required />
-              <div className="flex gap-2">
-                <button type="submit" disabled={adding} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">{adding ? "Adding..." : <><Plus size={12} /> Open</>}</button>
-                <button type="button" onClick={() => setShowAdd(false)} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><X size={12} /> Cancel</button>
-              </div>
-            </form>
-          )}
-          {showAdd === "lots" && (
-            <form onSubmit={handleSubmitLots} className="bg-gray-900 border border-gray-800 rounded-xl p-4 mt-2 space-y-3 overflow-x-auto">
-              <div className="flex items-center gap-3 mb-2">
-                <DateInput value={lotDate} onChange={setLotDate} label="Date" />
-              </div>
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-xs text-gray-500 uppercase">
-                    <th className="text-left px-1 py-1 w-24">Ticker</th>
-                    <th className="text-left px-1 py-1 w-20">Type</th>
-                    <th className="text-right px-1 py-1 w-24">Quantity</th>
-                    <th className="text-right px-1 py-1 w-24">Price</th>
-                    <th className="text-right px-1 py-1 w-20">Fees</th>
-                    <th className="text-left px-1 py-1">Notes</th>
-                    <th className="w-8"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lotRows.map((row, i) => (
-                    <tr key={i}>
-                      <td className="px-1 py-1"><input type="text" value={row.ticker} onChange={(e) => updateRow(i, "ticker", e.target.value.toUpperCase())} placeholder="AAPL" autoFocus={i === 0} className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-white placeholder-gray-600" /></td>
-                      <td className="px-1 py-1"><select value={row.type} onChange={(e) => updateRow(i, "type", e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-white"><option value="buy">Buy</option><option value="sell">Sell</option></select></td>
-                      <td className="px-1 py-1"><input type="number" step="any" value={row.quantity} onChange={(e) => updateRow(i, "quantity", e.target.value)} placeholder="0" className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-white text-right placeholder-gray-600" /></td>
-                      <td className="px-1 py-1"><input type="number" step="0.01" value={row.price} onChange={(e) => updateRow(i, "price", e.target.value)} placeholder="0.00" className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-white text-right placeholder-gray-600" /></td>
-                      <td className="px-1 py-1"><input type="number" step="0.01" value={row.fees} onChange={(e) => updateRow(i, "fees", e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-white text-right" /></td>
-                      <td className="px-1 py-1"><input type="text" value={row.notes} onChange={(e) => updateRow(i, "notes", e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-white placeholder-gray-600" /></td>
-                      <td className="px-1 py-1">{lotRows.length > 1 && <button type="button" onClick={() => setLotRows((r) => r.filter((_, idx) => idx !== i))} className="text-gray-600 hover:text-red-400 px-1"><Trash2 size={12} /></button>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="flex items-center gap-3">
-                <button type="button" onClick={() => setLotRows((r) => [...r, emptyRow()])} className="text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1"><Plus size={12} /> Add row</button>
-                <div className="flex-1" />
-                <button type="submit" disabled={adding} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">{adding ? "Adding..." : <><Plus size={12} /> Submit Lots</>}</button>
-                <button type="button" onClick={() => setShowAdd(false)} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><X size={12} /> Cancel</button>
-              </div>
-            </form>
-          )}
+          <div className="flex justify-end gap-2 mt-2">
+            <button onClick={() => setShowAdd("lots")} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><Plus size={12} /> Add Lots</button>
+            <button onClick={() => setShowAdd("positions")} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><Plus size={12} /> Add Tickers</button>
+          </div>
+          <Modal open={showAdd === "positions"} onClose={closeAdd} title="Add Tickers">
+            <AddTickersForm portfolioId={portfolioId} onDone={closeAdd} />
+          </Modal>
+          <Modal open={showAdd === "lots"} onClose={closeAdd} title="Add Lots">
+            <AddLotsForm portfolioId={portfolioId} onDone={closeAdd} />
+          </Modal>
         </>
       )}
 

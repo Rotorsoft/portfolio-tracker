@@ -111,28 +111,16 @@ export function MarketMarquee({ now, polling, quotesUpdatedAt, quoteStats, autoB
       </Tooltip>
 
       {hasData && (
-        <div className="overflow-hidden min-w-0 flex-1 select-none text-[11px]">
+        <div className="overflow-hidden min-w-0 flex-1 select-none text-[11px] contain-layout">
           <div
             ref={trackRef}
             className={`inline-flex items-center ${animate ? "marquee-scroll" : ""}`}
+            style={{ willChange: "transform", contain: "layout style" }}
           >
             {track}
           </div>
         </div>
       )}
-
-      <style>{`
-        @keyframes marquee {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-33.333%); }
-        }
-        .marquee-scroll {
-          animation: marquee 30s linear infinite;
-        }
-        .marquee-scroll:hover {
-          animation-play-state: paused;
-        }
-      `}</style>
     </div>
   );
 }

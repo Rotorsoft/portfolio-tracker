@@ -1,10 +1,13 @@
 import { useState } from "react";
-import { Plus, Upload, Trash2, X, Lightbulb, ExternalLink } from "lucide-react";
+import { Plus, Trash2, Lightbulb, ExternalLink } from "lucide-react";
 import { Tooltip } from "../components/Tooltip.js";
 import { trpc } from "../trpc.js";
 import { TickerChart } from "../components/TickerChart.js";
-import { DateInput } from "../components/DateInput.js";
+
 import { fmtDate, fmtUsd, fmtUsdAbs, fmtPctAbs, glColor } from "../fmt.js";
+import { FiftyTwoWeekBar } from "../components/FiftyTwoWeekBar.js";
+import { Modal } from "../components/Modal.js";
+import { AddSingleLotForm } from "../components/AddForms.js";
 import { getLiveAlerts, liveDayChange, livePositionGL, lastBuyPrice, avgDownOpportunity, avgDownColor, gradeColor, shouldPollQuotes } from "../live.js";
 
 type Props = { positionId: string; portfolioId: string; ticker: string; cutoffDate?: string; dipThreshold?: number };
@@ -30,85 +33,11 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, di
   const liveQuote = liveQuotes?.[ticker];
   const { data: entry } = trpc.getEntryAnalysis.useQuery({ positionId });
   const { data: fundamentals } = trpc.getFundamentals.useQuery({ symbol: ticker }, { staleTime: 5 * 60 * 1000 });
-  const addMutation = trpc.addLot.useMutation();
+
   const removeMutation = trpc.removeLot.useMutation();
   const utils = trpc.useUtils();
   const [showAdd, setShowAdd] = useState(false);
-  const [addMode, setAddMode] = useState<"single" | "bulk">("single");
-  const [lotForm, setLotForm] = useState({
-    type: "buy" as "buy" | "sell",
-    transaction_date: new Date().toISOString().split("T")[0],
-    quantity: "",
-    price: "",
-    fees: "0",
-    notes: "",
-  });
-  const [bulkText, setBulkText] = useState("");
-  const [adding, setAdding] = useState(false);
-
-  const handleAddLot = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAdding(true);
-    try {
-      await addMutation.mutateAsync({
-        portfolioId,
-        ticker,
-        lot: {
-          id: `lot-${crypto.randomUUID().slice(0, 8)}`,
-          type: lotForm.type,
-          transaction_date: lotForm.transaction_date,
-          quantity: Number(lotForm.quantity),
-          price: Number(lotForm.price),
-          fees: Number(lotForm.fees),
-          notes: lotForm.notes,
-        },
-      });
-      utils.getPosition.invalidate();
-      utils.getPortfolioSummary.invalidate();
-      utils.getEntryAnalysis.invalidate();
-      setLotForm({ type: "buy", transaction_date: new Date().toISOString().split("T")[0], quantity: "", price: "", fees: "0", notes: "" });
-    } catch (err) {
-      console.error("Failed to add lot:", err);
-    }
-    setAdding(false);
-  };
-
-  const handleBulkAdd = async (e: React.FormEvent) => {
-    e.preventDefault();
-    // Parse lines: type, date, quantity, price[, fees[, notes]]
-    // Example: buy, 2024-01-15, 100, 150.50, 4.99, Initial buy
-    const lines = bulkText.split("\n").map((l) => l.trim()).filter(Boolean);
-    setAdding(true);
-    for (const line of lines) {
-      const parts = line.split(/[,\t]+/).map((p) => p.trim());
-      if (parts.length < 4) continue;
-      const [type, date, qty, price, fees, ...notesParts] = parts;
-      const lotType = type.toLowerCase() === "sell" ? "sell" : "buy";
-      try {
-        await addMutation.mutateAsync({
-          portfolioId,
-          ticker,
-          lot: {
-            id: `lot-${crypto.randomUUID().slice(0, 8)}`,
-            type: lotType as "buy" | "sell",
-            date,
-            quantity: Number(qty),
-            price: Number(price),
-            fees: Number(fees || 0),
-            notes: notesParts.join(", "),
-          },
-        });
-      } catch (err) {
-        console.error(`Failed to add lot from line: ${line}`, err);
-      }
-    }
-    utils.getPosition.invalidate();
-    utils.getPortfolioSummary.invalidate();
-    utils.getEntryAnalysis.invalidate();
-    setBulkText("");
-    setAdding(false);
-    setShowAdd(false);
-  };
+  const [highlightLot, setHighlightLot] = useState<{ date: string; price: number; type: string } | null>(null);
 
   const handleRemoveLot = async (lotId: string) => {
     await removeMutation.mutateAsync({ portfolioId, ticker, lotId });
@@ -139,6 +68,8 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, di
         const cost = position.totalCost ?? 0;
         const avgCost = position.avgCostBasis ?? 0;
         const currentPrice = liveQuote?.price ?? tickerInfo?.lastClose ?? 0;
+        const pc = liveQuote?.previousClose ?? tickerInfo?.previousClose ?? 0;
+        const dayChg = pc > 0 ? currentPrice - pc : 0;
         const { mv: marketValue, gl: unrealizedGL, glPct } = livePositionGL(shares, avgCost, currentPrice);
 
         const a = entry?.analysis;
@@ -167,9 +98,7 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, di
         ];
         const holdCol2: KV[] = [];
         if (ti) {
-          const yrRange = ti.yearlyHigh - ti.yearlyLow;
-          const yrPct = yrRange > 0 ? Math.max(0, Math.min(100, ((currentPrice - ti.yearlyLow) / yrRange) * 100)) : 50;
-          holdCol2.push({ label: "52wk Range", value: <div className="flex items-center gap-1.5"><span className="text-white">${ti.yearlyLow.toFixed(0)}</span><div className="relative w-16 h-1.5 bg-gray-700 rounded-full"><div className="absolute top-1/2 -translate-y-1/2 w-2 h-2 bg-white rounded-full border border-gray-500" style={{ left: `calc(${yrPct}% - 4px)` }} /></div><span className="text-white">${ti.yearlyHigh.toFixed(0)}</span></div> });
+          holdCol2.push({ label: "52wk Range", value: <FiftyTwoWeekBar low={ti.yearlyLow} high={ti.yearlyHigh} current={currentPrice} avgCost={avgCost} dayChange={dayChg} width="w-20" /> });
           holdCol2.push({ label: "Volatility", value: `${ti.volatility30d.toFixed(1)}%`, tooltip: "30-day annualized volatility — the standard deviation of daily returns, scaled to a yearly rate. Measures how much the price swings. Higher % = more risk/opportunity. Typical stocks: 15-30%, high-growth: 40%+, stable blue chips: 10-15%." });
         }
         if (hasFundamentals) {
@@ -309,7 +238,7 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, di
         );
       })()}
 
-      <TickerChart symbol={position.ticker} lots={position.lots ?? []} cutoffDate={cutoffDate} />
+      <TickerChart symbol={position.ticker} lots={position.lots ?? []} cutoffDate={cutoffDate} highlightLot={highlightLot} />
 
       {/* Lots Table — consolidated with entry analysis */}
       {(() => {
@@ -359,7 +288,9 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, di
                 {[...(position.lots ?? [])].sort((a, b) => a.transactionDate.localeCompare(b.transactionDate)).map((lot) => {
                   const a = entryMap.get(lot.id);
                   return (
-                    <tr key={lot.id} className="border-b border-gray-800/50">
+                    <tr key={lot.id} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors cursor-default"
+                      onMouseEnter={() => setHighlightLot({ date: lot.transactionDate, price: lot.price, type: lot.type })}
+                      onMouseLeave={() => setHighlightLot(null)}>
                       <td className="px-3 py-2">
                         <span className={`text-xs font-medium px-2 py-0.5 rounded ${
                           lot.type === "buy" ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"
@@ -391,7 +322,7 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, di
                                 a.timingScore >= 66 ? "bg-emerald-500" : a.timingScore >= 33 ? "bg-amber-500" : "bg-red-500"
                               }`} style={{ width: `${a.timingScore}%` }} />
                             </div>
-                            <span className="text-xs text-gray-500">{a.timingScore.toFixed(0)}%</span>
+                            <span className={`text-xs ${a.timingScore >= 66 ? "text-emerald-400" : a.timingScore >= 33 ? "text-amber-400" : "text-red-400"}`}>{a.timingScore.toFixed(0)}%</span>
                           </div>
                         ) : <span className="text-gray-600 text-xs text-center block">—</span>}
                       </td>
@@ -408,72 +339,9 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, di
         );
       })()}
 
-      {showAdd && (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 mt-2 space-y-3 overflow-x-auto">
-          <div className="flex gap-2 mb-2">
-            <button onClick={() => setAddMode("single")}
-              className={`text-xs px-3 py-1 rounded-md ${addMode === "single" ? "bg-indigo-600 text-white" : "text-gray-400 hover:text-white"}`}>
-              Single
-            </button>
-            <button onClick={() => setAddMode("bulk")}
-              className={`text-xs px-3 py-1 rounded-md ${addMode === "bulk" ? "bg-indigo-600 text-white" : "text-gray-400 hover:text-white"}`}>
-              Bulk (CSV)
-            </button>
-          </div>
-
-          {addMode === "single" ? (
-            <form onSubmit={handleAddLot} className="space-y-3">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <select value={lotForm.type} onChange={(e) => setLotForm({ ...lotForm, type: e.target.value as "buy" | "sell" })}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white">
-                  <option value="buy">Buy</option>
-                  <option value="sell">Sell</option>
-                </select>
-                <DateInput value={lotForm.transaction_date} onChange={(v) => setLotForm({ ...lotForm, transaction_date: v })} />
-                <input type="number" placeholder="Quantity" step="any" value={lotForm.quantity}
-                  onChange={(e) => setLotForm({ ...lotForm, quantity: e.target.value })}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500" required />
-                <input type="number" placeholder="Price" step="0.01" value={lotForm.price}
-                  onChange={(e) => setLotForm({ ...lotForm, price: e.target.value })}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500" required />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <input type="number" placeholder="Fees" step="0.01" value={lotForm.fees}
-                  onChange={(e) => setLotForm({ ...lotForm, fees: e.target.value })}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500" />
-                <input type="text" placeholder="Notes" value={lotForm.notes}
-                  onChange={(e) => setLotForm({ ...lotForm, notes: e.target.value })}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500" />
-              </div>
-              <div className="flex gap-2">
-                <button type="submit" disabled={adding}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">
-                  {adding ? "Adding..." : <><Plus size={12} /> Add Lot</>}
-                </button>
-                <button type="button" onClick={() => setShowAdd(false)} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><X size={10} /> Cancel</button>
-              </div>
-            </form>
-          ) : (
-            <form onSubmit={handleBulkAdd} className="space-y-3">
-              <textarea
-                value={bulkText}
-                onChange={(e) => setBulkText(e.target.value)}
-                placeholder={"Paste lots, one per line:\nbuy, 2024-01-15, 100, 150.50, 4.99, Initial buy\nsell, 2024-06-01, 50, 180.00, 4.99, Took profits"}
-                rows={6}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-              />
-              <p className="text-xs text-gray-600">Format: type, date, quantity, price, fees, notes</p>
-              <div className="flex gap-2">
-                <button type="submit" disabled={adding}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">
-                  {adding ? "Adding..." : <><Upload size={12} /> Add All Lots</>}
-                </button>
-                <button type="button" onClick={() => setShowAdd(false)} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><X size={10} /> Cancel</button>
-              </div>
-            </form>
-          )}
-        </div>
-      )}
+      <Modal open={showAdd} onClose={() => setShowAdd(false)} title={`Add Lot — ${ticker}`}>
+        <AddSingleLotForm portfolioId={portfolioId} ticker={ticker} onDone={() => setShowAdd(false)} />
+      </Modal>
     </div>
   );
 }

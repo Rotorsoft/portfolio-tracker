@@ -2,12 +2,15 @@ import { useState } from "react";
 import { ResponsiveContainer, ComposedChart, Line, Bar, Area, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine, Brush } from "recharts";
 import { trpc } from "../trpc.js";
 import { fmtDate, fmtDateShort } from "../fmt.js";
+import { shouldPollQuotes } from "../live.js";
 
 type Lot = { id: string; type: string; transactionDate: string; quantity: number; price: number; fees: number; notes: string; grade?: string; gradeScore?: number; gradeExplanation?: string };
+type HighlightLot = { date: string; price: number; type: string } | null;
 
-export function TickerChart({ symbol, lots, cutoffDate }: { symbol: string; lots: Lot[]; cutoffDate?: string }) {
+export function TickerChart({ symbol, lots, cutoffDate, highlightLot }: { symbol: string; lots: Lot[]; cutoffDate?: string; highlightLot?: HighlightLot }) {
   const { data: prices } = trpc.getTickerPrices.useQuery({ symbol, from: "2024-01-01" });
   const { data: overlays } = trpc.getChartOverlays.useQuery({ symbol });
+  const { data: liveQuotes } = trpc.getQuotes.useQuery({ symbols: [symbol] }, { refetchInterval: shouldPollQuotes() ? 300_000 : false });
   const [showMA, setShowMA] = useState(true);
   const [showBB, setShowBB] = useState(false);
 
@@ -19,12 +22,19 @@ export function TickerChart({ symbol, lots, cutoffDate }: { symbol: string; lots
     );
   }
 
+  // Append today's live price if not in historical data
+  const today = new Date().toISOString().split("T")[0];
+  const livePrice = liveQuotes?.[symbol]?.price;
+  const allPrices = prices && livePrice && (!prices.length || prices[prices.length - 1].date < today)
+    ? [...prices, { date: today, close: livePrice, volume: 0 }]
+    : prices ?? [];
+
   // Merge prices with lot markers + overlays
   const ma50Map = new Map(overlays?.ma50?.map((m) => [m.date, m.value]) ?? []);
   const ma200Map = new Map(overlays?.ma200?.map((m) => [m.date, m.value]) ?? []);
   const bbMap = new Map(overlays?.bollinger?.map((b) => [b.date, b]) ?? []);
 
-  const chartData = prices.map((p) => {
+  const chartData = allPrices.map((p) => {
     const buyLots = lots.filter((l) => l.transactionDate === p.date && l.type === "buy");
     const sellLots = lots.filter((l) => l.transactionDate === p.date && l.type === "sell");
     const ma50AtDate = ma50Map.get(p.date) ?? null;
@@ -53,6 +63,14 @@ export function TickerChart({ symbol, lots, cutoffDate }: { symbol: string; lots
     };
   });
 
+  const highlightIndex = highlightLot ? (() => {
+    const exact = chartData.findIndex((d) => d.date === highlightLot.date);
+    if (exact >= 0) return exact;
+    // Find nearest date (next trading day)
+    const nearest = chartData.findIndex((d) => d.date >= highlightLot.date);
+    return nearest >= 0 ? nearest : chartData.length - 1;
+  })() : undefined;
+
   const avgCost = lots.filter((l) => l.type === "buy").length > 0
     ? lots.filter((l) => l.type === "buy").reduce((s, l) => s + l.quantity * l.price, 0) /
       lots.filter((l) => l.type === "buy").reduce((s, l) => s + l.quantity, 0)
@@ -79,6 +97,7 @@ export function TickerChart({ symbol, lots, cutoffDate }: { symbol: string; lots
           <YAxis yAxisId="volume" orientation="right" tick={{ fontSize: 10, fill: "#475569" }}
             tickFormatter={(v: number) => v >= 1e6 ? `${(v / 1e6).toFixed(0)}M` : v >= 1e3 ? `${(v / 1e3).toFixed(0)}K` : `${v}`} />
           <Tooltip
+            defaultIndex={highlightIndex != null && highlightIndex >= 0 ? highlightIndex : undefined}
             content={({ active, payload, label }) => {
               if (!active || !payload?.length) return null;
               const d = payload[0]?.payload;
@@ -147,6 +166,10 @@ export function TickerChart({ symbol, lots, cutoffDate }: { symbol: string; lots
           {/* Entry/exit markers */}
           <Line yAxisId="price" type="monotone" dataKey="buyMarker" stroke="#10b981" strokeWidth={0} dot={{ r: 6, fill: "#10b981", stroke: "#064e3b", strokeWidth: 2 }} />
           <Line yAxisId="price" type="monotone" dataKey="sellMarker" stroke="#ef4444" strokeWidth={0} dot={{ r: 6, fill: "#ef4444", stroke: "#7f1d1d", strokeWidth: 2 }} />
+          {/* Highlight from lot table hover */}
+          {highlightLot && highlightIndex != null && highlightIndex >= 0 && (
+            <ReferenceLine yAxisId="price" x={chartData[highlightIndex].date} stroke={highlightLot.type === "buy" ? "#10b981" : "#ef4444"} strokeDasharray="3 3" strokeOpacity={0.5} />
+          )}
           <Brush dataKey="date" height={20} stroke="#334155" fill="#1e293b" tickFormatter={fmtDateShort} travellerWidth={8} />
         </ComposedChart>
       </ResponsiveContainer>
