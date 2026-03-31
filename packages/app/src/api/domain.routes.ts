@@ -236,6 +236,8 @@ export const domainRouter = t.router({
         positionId: string; timingScore: number; dcaSavingsPct: number; signal: string;
         maxDrawdown: number; daysUnderwater: number; yearlyRangePct: number; entryVsMa50: number;
         compositeScore: number; rsi14: number; entryGrade: string; entryGradeScore: number;
+        alphaPct: number; benchmarkReturnPct: number; actualReturnPct: number;
+        benchmarkValue: number; benchmarkCost: number;
       }> = [];
 
       for (const pos of positions) {
@@ -259,12 +261,20 @@ export const domainRouter = t.router({
           entryVsMa50: pos.entryVsMa50 ?? 0,
           compositeScore: tickerInfo?.compositeScore ?? 0, rsi14: tickerInfo?.rsi14 ?? 50,
           entryGrade: pos.entryGrade ?? "C", entryGradeScore: pos.entryGradeScore ?? 50,
+          alphaPct: pos.alphaPct ?? 0, benchmarkReturnPct: pos.benchmarkReturnPct ?? 0, actualReturnPct: pos.actualReturnPct ?? 0,
+          benchmarkValue: pos.benchmarkValue ?? 0, benchmarkCost: pos.benchmarkCost ?? 0,
         });
       }
+      const totalBenchmarkCost = tickerSummaries.reduce((s, p) => s + p.benchmarkCost, 0);
+      const totalBenchmarkValue = tickerSummaries.reduce((s, p) => s + p.benchmarkValue, 0);
+      const portfolioBenchmarkReturnPct = totalBenchmarkCost > 0 ? ((totalBenchmarkValue - totalBenchmarkCost) / totalBenchmarkCost) * 100 : 0;
+      const portfolioActualReturnPct = totalCost > 0 ? ((totalMarketValue - totalCost) / totalCost) * 100 : 0;
       return {
         totalCost, totalMarketValue,
         totalUnrealizedGL: totalMarketValue - totalCost,
         totalUnrealizedGLPercent: totalCost > 0 ? ((totalMarketValue - totalCost) / totalCost) * 100 : 0,
+        totalBenchmarkValue, portfolioBenchmarkReturnPct,
+        portfolioAlphaPct: portfolioActualReturnPct - portfolioBenchmarkReturnPct,
         positions: tickerSummaries.sort((a, b) => b.marketValue - a.marketValue),
       };
     }),

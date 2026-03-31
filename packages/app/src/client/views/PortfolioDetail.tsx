@@ -14,6 +14,7 @@ import { getLivePrice, getLiveAlerts, livePortfolioTotals, livePortfolioDayChang
 import { InfoTip } from "../components/InfoTip.js";
 import { MarketMarquee } from "../components/MarketMarquee.js";
 import { AddTickersForm, AddLotsForm } from "../components/AddForms.js";
+import { BenchmarkChart } from "../components/BenchmarkChart.js";
 import { Modal } from "../components/Modal.js";
 import { FiftyTwoWeekBar } from "../components/FiftyTwoWeekBar.js";
 
@@ -39,6 +40,8 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
   const subTab = route.page === "portfolio" ? route.tab : "positions";
   const setSubTab = (tab: SubTab) => nav.toPortfolio(portfolioId, tab);
   const [showSettings, setShowSettings] = useState(false);
+  const [analysisMode, setAnalysisMode] = useState<"benchmark" | "whatif">("benchmark");
+  const [extraTickers, setExtraTickers] = useState<string[]>([]);
   const [showAdd, setShowAdd] = useState<false | "positions" | "lots">(false);
   const closeAdd = useCallback(() => setShowAdd(false), []);
   const [sortCol, setSortCol] = useState<string>("marketValue");
@@ -51,6 +54,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
 
   const { data: allTickerData } = trpc.getTickers.useQuery();
   const tickerSymbols = positions?.map((p) => p.ticker).filter(Boolean) ?? [];
+  const nonPortfolioTickers = (allTickerData ?? []).filter((t) => !tickerSymbols.includes(t.symbol)).map((t) => t.symbol);
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 30_000);
@@ -431,7 +435,21 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
 
       {/* === Analysis Tab === */}
       {subTab === "analysis" && (
-        <WhatIfChart portfolioId={portfolioId} cutoffDate={cutoffDate} onSelectTicker={(ticker) => nav.toPosition(portfolioId, ticker)} />
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            {([
+              { id: "benchmark", label: "Benchmark vs S&P 500" },
+              { id: "whatif", label: "What-If Single Date" },
+            ] as const).map((m) => (
+              <button key={m.id} onClick={() => setAnalysisMode(m.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${analysisMode === m.id ? "bg-indigo-600 text-white" : "text-gray-500 hover:text-white hover:bg-gray-800/50"}`}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+          {analysisMode === "benchmark" && <BenchmarkChart portfolioId={portfolioId} />}
+          {analysisMode === "whatif" && <WhatIfChart portfolioId={portfolioId} cutoffDate={cutoffDate} onSelectTicker={(ticker) => nav.toPosition(portfolioId, ticker)} />}
+        </div>
       )}
 
 
@@ -512,28 +530,25 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
               </tr>
             </thead>
             <tbody>
-              {[...(positions ?? [])].sort((a, b) => {
-                const ta = allTickerData?.find((t) => t.symbol === a.ticker);
-                const tb = allTickerData?.find((t) => t.symbol === b.ticker);
-                const pa = ta?.priceCount ?? 0;
-                const pb = tb?.priceCount ?? 0;
-                return pa - pb; // unfilled first
-              }).map((pos) => {
-                const ticker = allTickerData?.find((t) => t.symbol === pos.ticker);
-                const bfStatus = backfillStatus[pos.ticker];
+              {(() => {
+                const allSymbols = [...tickerSymbols, ...nonPortfolioTickers, ...extraTickers.filter((s) => !nonPortfolioTickers.includes(s) && !tickerSymbols.includes(s))];
+                const unique = [...new Set(allSymbols)].sort();
+                return unique.map((sym) => {
+                const isPortfolio = tickerSymbols.includes(sym);
+                const ticker = allTickerData?.find((t) => t.symbol === sym);
+                const bfStatus = backfillStatus[sym];
                 const total = ticker?.priceCount ?? 0;
                 const firstDate = ticker?.firstPriceDate || "";
                 const lastDate = ticker?.lastPriceDate || "";
-                // In range: ticker has data that covers the slider range
                 const inRange = !!firstDate && firstDate <= effectiveBackfillFrom && (lastDate >= today || lastDate >= recentCutoff);
                 const weekdays = countWeekdays(effectiveBackfillFrom, lastDate || today);
                 const pct = inRange ? 100 : total === 0 ? 0 : Math.min(99, Math.round(total / weekdays * 100));
                 const filled = inRange;
                 const barColor = pct === 0 ? "bg-red-500" : filled ? "bg-emerald-500" : "bg-amber-500";
                 return (
-                  <tr key={pos.ticker} className="border-b border-gray-800/50">
+                  <tr key={sym} className={`border-b border-gray-800/50 ${isPortfolio ? "" : "opacity-50"}`}>
                     <td className="px-3 py-2">
-                      <span className="font-medium text-white">{pos.ticker}</span>
+                      <span className={`font-medium ${isPortfolio ? "text-white" : "text-gray-500"}`}>{sym}</span>
                       {ticker?.name && <span className="text-xs text-gray-500 ml-2">{ticker.name}</span>}
                     </td>
                     <td className="px-3 py-2 text-right text-gray-300">
@@ -555,7 +570,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                           <span className="text-emerald-400 text-sm">&#10003;</span>
                         ) : (
                           <>
-                            <button onClick={() => handleBackfill(pos.ticker)} disabled={anyLoading}
+                            <button onClick={() => handleBackfill(sym)} disabled={anyLoading}
                               className="text-indigo-400 hover:text-indigo-300 text-sm disabled:opacity-50 inline-flex items-center gap-1">
                               {bfStatus?.loading ? "Loading..." : <><RefreshCw size={12} /> Backfill</>}
                             </button>
@@ -569,7 +584,26 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                       </td>
                   </tr>
                 );
-              })}
+              }); })()}
+              {/* Add ticker row */}
+              <tr>
+                <td colSpan={5} className="px-3 py-2">
+                  <form onSubmit={(e) => {
+                    e.preventDefault();
+                    const input = (e.target as HTMLFormElement).elements.namedItem("addTicker") as HTMLInputElement;
+                    const sym = input.value.trim().toUpperCase();
+                    if (!sym) return;
+                    if (!extraTickers.includes(sym) && !positions?.some((p) => p.ticker === sym)) {
+                      setExtraTickers((prev) => [...prev, sym]);
+                    }
+                    input.value = "";
+                  }} className="flex items-center gap-2">
+                    <input type="text" name="addTicker" placeholder="Add ticker (e.g. VOO)" autoComplete="off"
+                      className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white placeholder-gray-600 uppercase w-48" />
+                    <button type="submit" className="text-xs text-gray-500 hover:text-white flex items-center gap-1">+ Add</button>
+                  </form>
+                </td>
+              </tr>
             </tbody>
           </table>
           {(!positions || positions.length === 0) && (

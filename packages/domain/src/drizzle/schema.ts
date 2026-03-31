@@ -56,6 +56,13 @@ export const positions = pgTable("positions", {
   entryGradeScore: real("entry_grade_score").notNull().default(50),
   rsiAtEntry: real("rsi_at_entry").notNull().default(50),
   bollingerPctAtEntry: real("bollinger_pct_at_entry").notNull().default(50),
+  // Benchmark (S&P 500) comparison — cached, recomputed on lot changes
+  benchmarkShares: real("benchmark_shares").notNull().default(0),  // hypothetical VOO shares if same $ invested
+  benchmarkCost: real("benchmark_cost").notNull().default(0),      // total $ invested (same as totalCost)
+  benchmarkValue: real("benchmark_value").notNull().default(0),    // current value of hypothetical VOO
+  benchmarkReturnPct: real("benchmark_return_pct").notNull().default(0),
+  actualReturnPct: real("actual_return_pct").notNull().default(0),
+  alphaPct: real("alpha_pct").notNull().default(0),                // actual return - benchmark return
 });
 
 export const lots = pgTable("lots", {

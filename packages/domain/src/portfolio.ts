@@ -157,7 +157,7 @@ function calcPositionStats(posLots: Lot[]) {
 
 /** Recalculate timing score and DCA comparison for a position */
 export async function recalcPositionAnalytics(positionId: string) {
-  const { getTickerPrices } = await import("./ticker.js");
+  const { getTickerPrices, getPriceOnDate } = await import("./ticker.js");
   const { smaAtDate, maxDrawdownSince, countDaysBelow, yearlyRange, yearlyRangePosition, computeEntryGrade, gradeExplanation } = await import("./indicators.js");
   const pos = await db().select().from(positions).where(eq(positions.id, positionId));
   if (pos.length === 0) return;
@@ -230,6 +230,26 @@ export async function recalcPositionAnalytics(positionId: string) {
     timingScore: Math.round(lotGrades.reduce((s, lg) => s + lg.grade.timingScore * lg.qty, 0) / totalShares),
   };
 
+  // Benchmark vs S&P 500 (VOO) — compute hypothetical VOO investment for each lot
+  let benchmarkShares = 0;
+  let benchmarkCost = 0;
+  for (const lot of buyLots) {
+    const lotCost = lot.quantity * lot.price + lot.fees;
+    const vooPrice = await getPriceOnDate("VOO", lot.transactionDate);
+    if (vooPrice && vooPrice.close > 0) {
+      benchmarkShares += lotCost / vooPrice.close;
+      benchmarkCost += lotCost;
+    }
+  }
+  // Current VOO price for benchmark value
+  const latestVoo = allPrices.length > 0 ? await getPriceOnDate("VOO", allPrices[allPrices.length - 1].date) : null;
+  const benchmarkValue = latestVoo ? benchmarkShares * latestVoo.close : 0;
+  const benchmarkReturnPct = benchmarkCost > 0 ? ((benchmarkValue - benchmarkCost) / benchmarkCost) * 100 : 0;
+  const currentPrice = allPrices.length > 0 ? allPrices[allPrices.length - 1].close : 0;
+  const actualValue = (pos[0].totalShares ?? 0) * currentPrice;
+  const actualReturnPct = totalCost > 0 ? ((actualValue - totalCost) / totalCost) * 100 : 0;
+  const alphaPct = actualReturnPct - benchmarkReturnPct;
+
   await db().update(positions).set({
     timingScore, dcaSavingsPct, periodAvg, periodLow, periodHigh,
     ma50AtEntry: Math.round(weightedMa50 * 100) / 100,
@@ -242,6 +262,12 @@ export async function recalcPositionAnalytics(positionId: string) {
     entryGradeScore: entryGradeResult.total,
     rsiAtEntry: entryGradeResult.trendScore,
     bollingerPctAtEntry: entryGradeResult.valueScore,
+    benchmarkShares: Math.round(benchmarkShares * 10000) / 10000,
+    benchmarkCost: Math.round(benchmarkCost * 100) / 100,
+    benchmarkValue: Math.round(benchmarkValue * 100) / 100,
+    benchmarkReturnPct: Math.round(benchmarkReturnPct * 100) / 100,
+    actualReturnPct: Math.round(actualReturnPct * 100) / 100,
+    alphaPct: Math.round(alphaPct * 100) / 100,
   }).where(eq(positions.id, positionId));
 }
 
