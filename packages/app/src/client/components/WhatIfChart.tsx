@@ -160,6 +160,26 @@ export function WhatIfChart({ portfolioId, cutoffDate, onSelectTicker }: { portf
                 </tr>
               ))}
             </tbody>
+            <tfoot>
+              {(() => {
+                const totalActual = data.positions.reduce((s, p) => s + p.actualCost, 0);
+                const totalWI = data.positions.reduce((s, p) => s + p.whatIfCost, 0);
+                const totalDiff = totalActual - totalWI;
+                const totalDiffPct = totalWI > 0 ? (totalDiff / totalWI) * 100 : 0;
+                return (
+                  <tr className="border-t border-gray-700">
+                    <td className="px-3 py-2 text-white font-medium">Total</td>
+                    <td className="px-3 py-2 text-right text-gray-300" />
+                    <td className="px-3 py-2 text-right text-gray-300" />
+                    <td className="px-3 py-2 text-right text-white font-medium">{fmtUsd(totalActual)}</td>
+                    <td className="px-3 py-2 text-right text-gray-300" />
+                    <td className="px-3 py-2 text-right text-white font-medium">{fmtUsd(totalWI)}</td>
+                    <td className={`px-3 py-2 text-right font-bold ${totalDiff > 0 ? "text-red-400" : totalDiff < 0 ? "text-emerald-400" : "text-gray-400"}`}>{fmtUsdAbs(totalDiff)}</td>
+                    <td className={`px-3 py-2 text-right font-bold ${totalDiffPct > 0 ? "text-red-400" : totalDiffPct < 0 ? "text-emerald-400" : "text-gray-400"}`}>{Math.abs(totalDiffPct).toFixed(1)}%</td>
+                  </tr>
+                );
+              })()}
+            </tfoot>
           </table>
         </div>
       )}

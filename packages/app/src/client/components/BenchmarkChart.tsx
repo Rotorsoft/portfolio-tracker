@@ -1,3 +1,4 @@
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid, ReferenceLine, Cell } from "recharts";
 import { trpc } from "../trpc.js";
 import { fmtUsd, fmtUsdAbs, fmtPctAbs, glColor } from "../fmt.js";
 import { StatCard } from "./StatCard.js";
@@ -15,8 +16,16 @@ export function BenchmarkChart({ portfolioId }: { portfolioId: string }) {
   const actualGL = totalMarketValue - totalCost;
   const benchmarkGL = (totalBenchmarkValue ?? 0) - totalCost;
 
-  // Sort positions by alpha
   const sorted = [...summary.positions].sort((a, b) => (b.alphaPct ?? 0) - (a.alphaPct ?? 0));
+  const maxAlpha = Math.max(...sorted.map((p) => Math.abs(p.alphaPct ?? 0)), 1);
+
+  // Chart data
+  const chartData = sorted.map((p) => ({
+    ticker: p.ticker,
+    alpha: Math.round((p.alphaPct ?? 0) * 100) / 100,
+    actual: Math.round((p.actualReturnPct ?? 0) * 100) / 100,
+    benchmark: Math.round((p.benchmarkReturnPct ?? 0) * 100) / 100,
+  }));
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
@@ -37,11 +46,33 @@ export function BenchmarkChart({ portfolioId }: { portfolioId: string }) {
         </div>
       </div>
 
-      {/* Per-position alpha table */}
-      <div className="overflow-x-auto">
+      {/* Alpha bar chart */}
+      <ResponsiveContainer width="100%" height={Math.max(200, sorted.length * 32 + 40)}>
+        <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 20, bottom: 0, left: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
+          <XAxis type="number" tick={{ fontSize: 11, fill: "#64748b" }} tickFormatter={(v: number) => `${v}%`} />
+          <YAxis type="category" dataKey="ticker" tick={{ fontSize: 11, fill: "#e2e8f0", fontWeight: 500 }} width={50} />
+          <ReferenceLine x={0} stroke="#475569" />
+          <RechartsTooltip
+            contentStyle={{ backgroundColor: "#1e293b", border: "1px solid #334155", borderRadius: "8px", fontSize: "12px" }}
+            formatter={(value: number, name: string) => [
+              `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`,
+              name === "alpha" ? "Alpha" : name === "actual" ? "Your Return" : "S&P 500",
+            ]}
+          />
+          <Bar dataKey="alpha" radius={[0, 4, 4, 0]}>
+            {chartData.map((d, i) => (
+              <Cell key={i} fill={d.alpha >= 0 ? "#10b981" : "#ef4444"} fillOpacity={0.7} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+
+      {/* Per-position table */}
+      <div className="overflow-x-auto mt-4">
         <table className="w-full text-xs">
           <thead>
-            <tr className="border-b border-gray-800">
+            <tr className="border-b border-gray-700 bg-gray-800/50">
               <th className="text-left px-3 py-2 text-gray-500 uppercase">Ticker</th>
               <th className="text-right px-3 py-2 text-gray-500 uppercase">Cost</th>
               <th className="text-right px-3 py-2 text-gray-500 uppercase">Your Value</th>
@@ -57,6 +88,7 @@ export function BenchmarkChart({ portfolioId }: { portfolioId: string }) {
             {sorted.map((pos) => {
               const posGL = pos.marketValue - (pos.totalShares * pos.avgCostBasis);
               const posBenchGL = (pos.benchmarkValue ?? 0) - (pos.benchmarkCost ?? 0);
+              const alpha = pos.alphaPct ?? 0;
               return (
                 <tr key={pos.ticker} className="border-b border-gray-800/50">
                   <td className="px-3 py-2 text-white font-medium">{pos.ticker}</td>
@@ -65,8 +97,19 @@ export function BenchmarkChart({ portfolioId }: { portfolioId: string }) {
                   <td className={`px-3 py-2 text-right font-medium ${glColor(posGL)}`}>{fmtPctAbs(pos.actualReturnPct ?? 0)}</td>
                   <td className={`px-3 py-2 text-right text-gray-300 border-l border-gray-800`}>{fmtUsd(pos.benchmarkValue ?? 0)}</td>
                   <td className={`px-3 py-2 text-right font-medium ${glColor(posBenchGL)}`}>{fmtPctAbs(pos.benchmarkReturnPct ?? 0)}</td>
-                  <td className={`px-3 py-2 text-right font-bold border-l border-gray-800 ${(pos.alphaPct ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                    {(pos.alphaPct ?? 0) >= 0 ? "+" : ""}{fmtPctAbs(pos.alphaPct ?? 0)}
+                  <td className="px-3 py-2 border-l border-gray-800">
+                    <div className="flex items-center justify-end gap-2">
+                      <div className="w-16 h-1.5 bg-gray-800 rounded-full overflow-hidden flex">
+                        {alpha >= 0 ? (
+                          <div className="h-full bg-emerald-500 rounded-full ml-auto" style={{ width: `${Math.min(100, (alpha / maxAlpha) * 100)}%` }} />
+                        ) : (
+                          <div className="h-full bg-red-500 rounded-full" style={{ width: `${Math.min(100, (Math.abs(alpha) / maxAlpha) * 100)}%` }} />
+                        )}
+                      </div>
+                      <span className={`font-bold tabular-nums ${alpha >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                        {alpha >= 0 ? "+" : ""}{fmtPctAbs(alpha)}
+                      </span>
+                    </div>
                   </td>
                 </tr>
               );
