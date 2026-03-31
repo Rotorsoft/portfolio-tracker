@@ -9,8 +9,9 @@ import { DateInput } from "../components/DateInput.js";
 import { WhatIfChart } from "../components/WhatIfChart.js";
 import { PortfolioSettings } from "../components/PortfolioSettings.js";
 import { fmtDate, fmtMonthYear, fmtUsd, fmtUsdAbs, fmtPctAbs, glColor } from "../fmt.js";
-import { getLivePrice, getLiveAlerts, livePortfolioTotals, livePortfolioDayChange, livePositionGL, liveDayChange, avgDownOpportunity, avgDownColor, volatilityColor, gradeColor, signalColor, fmtDividendYield, lastTradingDate, pendingBackfillTickers, isMarketOpen, shouldPollQuotes, marketCountdown, fmtCountdown } from "../live.js";
+import { getLivePrice, getLiveAlerts, livePortfolioTotals, livePortfolioDayChange, livePositionGL, liveDayChange, avgDownOpportunity, avgDownColor, volatilityColor, gradeColor, signalColor, fmtDividendYield, lastTradingDate, pendingBackfillTickers, shouldPollQuotes } from "../live.js";
 import { InfoTip } from "../components/InfoTip.js";
+import { MarketMarquee } from "../components/MarketMarquee.js";
 
 
 type Props = {
@@ -53,9 +54,11 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
     return () => clearInterval(id);
   }, []);
   const polling = shouldPollQuotes();
+  const INDEX_SYMBOLS = ["^DJI", "^GSPC", "^IXIC"];
+  const allSymbols = [...new Set([...tickerSymbols, ...INDEX_SYMBOLS])];
   const { data: liveQuotes, dataUpdatedAt: quotesUpdatedAt } = trpc.getQuotes.useQuery(
-    { symbols: tickerSymbols },
-    { enabled: tickerSymbols.length > 0, refetchInterval: polling ? 300_000 : false }
+    { symbols: allSymbols },
+    { enabled: allSymbols.length > 0, refetchInterval: polling ? 300_000 : false }
   );
   const { data: quoteStats } = trpc.getQuoteStats.useQuery(undefined, { refetchInterval: polling ? 300_000 : false });
   const getSortVal = (pos: any, col: string) => {
@@ -219,44 +222,14 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
     { id: "prices", label: "Price Data", icon: <Database size={14} /> },
   ];
 
-  const livePanel = (() => {
-    const target = lastTradingDate();
-    const marketOpen = isMarketOpen();
-    const refreshCount = quoteStats?.refreshCount ?? 0;
-    const nextUpdateIn = quotesUpdatedAt ? Math.max(0, 300_000 - (now - quotesUpdatedAt)) : 0;
-    const lastRefreshAgo = quoteStats?.lastRefreshTs ? now - quoteStats.lastRefreshTs : 0;
-    const mc = marketCountdown();
-    return (
-      <div className="flex items-center gap-2 text-[10px]">
-        <div className={`w-1.5 h-1.5 rounded-full ${marketOpen ? "bg-emerald-400 animate-pulse" : "bg-gray-600"}`} />
-        {marketOpen ? (
-          <>
-            <span className="text-gray-300 font-medium">Live</span>
-            <span className="text-gray-600">every 5 min · next in {fmtCountdown(nextUpdateIn)}</span>
-            <div className="flex items-center gap-3 ml-2">
-              <div><span className="text-gray-600">Refreshes</span> <span className="text-gray-300 ml-0.5">{refreshCount}</span></div>
-              {lastRefreshAgo > 0 && <div><span className="text-gray-600">Last</span> <span className="text-gray-300 ml-0.5">{fmtCountdown(lastRefreshAgo)} ago</span></div>}
-              {autoBackfilling && <span className="flex items-center gap-0.5 text-amber-400"><RefreshCw size={8} className="animate-spin" /> Syncing...</span>}
-            </div>
-            <span className="text-emerald-400 ml-2">Market open · {mc.label} {fmtCountdown(mc.ms)}</span>
-          </>
-        ) : (
-          <>
-            <span className="text-gray-600">Market closed · {mc.label} {fmtCountdown(mc.ms)}</span>
-            <span className="text-gray-600 ml-2">Last Close {fmtDate(target)}</span>
-            {polling && <span className="text-gray-600 ml-2">settling...</span>}
-          </>
-        )}
-      </div>
-    );
-  })();
+  const livePanel = <MarketMarquee now={now} polling={polling} quotesUpdatedAt={quotesUpdatedAt} quoteStats={quoteStats} autoBackfilling={autoBackfilling} quotes={liveQuotes} />;
 
   if (route.page === "position" && route.portfolioId === portfolioId) {
     const pos = positions?.find((p) => p.ticker === route.ticker);
     if (!pos) return <div className="text-gray-500">Loading...</div>;
     return (
       <div>
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center mb-4 min-w-0">
           <BackButton label={`Back to ${portfolio?.name ?? "portfolio"}`} onClick={() => nav.toPortfolio(portfolioId)} />
           {livePanel}
         </div>
@@ -268,7 +241,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center mb-4 min-w-0">
         <BackButton label="Back to portfolios" onClick={onBack} />
         {livePanel}
       </div>
