@@ -62,6 +62,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
   );
   const { data: quoteStats } = trpc.getQuoteStats.useQuery(undefined, { refetchInterval: polling ? 300_000 : false });
   const getSortVal = (pos: any, col: string) => {
+    if (col === "52wk") { const f = bulkFundamentals?.[pos.ticker]; const lo = f?.fiftyTwoWeekLow ?? 0; const hi = f?.fiftyTwoWeekHigh ?? 0; const price = getLivePrice(liveQuotes, pos.ticker, pos.currentPrice); return hi > lo ? (price - lo) / (hi - lo) : 0; }
     if (col === "pe") return bulkFundamentals?.[pos.ticker]?.trailingPE ?? 0;
     if (col === "yield") return bulkFundamentals?.[pos.ticker]?.dividendYield ?? 0;
     if (col === "volatility") return allTickerData?.find((t: any) => t.symbol === pos.ticker)?.volatility30d ?? 0;
@@ -288,15 +289,16 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
             <div>
               <div className="text-sm text-gray-600 uppercase">Value</div>
               <div className="text-lg font-semibold text-white">{fmtUsd(live.totalValue)}</div>
-              <div className={`text-[10px] ${glColor(day.chg)}`}>{fmtUsdAbs(day.chg)} ({fmtPctAbs(day.pct)})</div>
             </div>
             <div>
               <div className="text-sm text-gray-600 uppercase">Gain/Loss</div>
               <div className={`text-lg font-semibold ${glColor(live.gl)}`}>{fmtUsdAbs(live.gl)}</div>
+              <div className={`text-[10px] ${glColor(day.chg)}`}>{fmtUsdAbs(day.chg)} ({fmtPctAbs(day.pct)})</div>
             </div>
             <div>
               <div className="text-sm text-gray-600 uppercase">Return</div>
               <div className={`text-lg font-semibold ${glColor(live.glPct)}`}>{fmtPctAbs(live.glPct)}</div>
+              <div className={`text-[10px] ${glColor(day.chg)}`}>{fmtPctAbs(live.totalCost > 0 ? (day.chg / live.totalCost) * 100 : 0)}</div>
             </div>
           </div>
           );
@@ -318,10 +320,10 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                     { key: "totalShares", label: "Shares", align: "right" },
                     { key: "avgCostBasis", label: "Avg Cost", align: "right" },
                     { key: "currentPrice", label: "Current", align: "right" },
-                    { key: "marketValue", label: "Mkt Value", align: "right" },
+                    { key: "52wk", label: "52wk Range", align: "center" },
+                    { key: "marketValue", label: "Market Value", align: "right" },
                     { key: "unrealizedGL", label: "Gain/Loss", align: "right" },
                     { key: "unrealizedGLPercent", label: "G/L %", align: "right" },
-                    { key: "lots", label: "Lots", align: "right" },
                     { key: "pe", label: "P/E", align: "right" },
                     { key: "yield", label: "Yield", align: "right" },
                   ].map((col) => (
@@ -331,7 +333,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                     </th>
                   ))}
                   <th onClick={() => toggleSort("volatility")}
-                    className="text-right px-3 py-2 text-xs text-gray-500 uppercase cursor-pointer hover:text-gray-300 select-none whitespace-nowrap">
+                    className="text-right px-3 py-2 text-xs text-gray-500 uppercase cursor-pointer hover:text-gray-300 select-none whitespace-nowrap border-l border-gray-800">
                     Risk{sortCol === "volatility" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
                     <InfoTip>
                       <div className="space-y-1.5">
@@ -416,13 +418,51 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                       {pos.tickerName && <div className="text-[10px] text-gray-600 truncate max-w-[100px]">{pos.tickerName}</div>}
                       {(() => { const lp = getLivePrice(liveQuotes, pos.ticker, pos.currentPrice); const opp = avgDownOpportunity(pos.lastBuyPrice, lp, pos.avgCostBasis, pos.totalShares); const color = opp ? avgDownColor(opp.gapPct, portfolio?.dipThreshold ?? 5) : ""; return opp && color ? <div className={`text-[10px] font-medium ${color}`}>▼ {fmtPctAbs(opp.gapPct)} below last buy</div> : null; })()}
                     </td>
-                    <td className="px-3 py-2 text-right text-gray-300">{pos.totalShares.toLocaleString()}</td>
-                    <td className="px-3 py-2 text-right text-gray-300">{fmtUsd(pos.avgCostBasis)}</td>
-                    {(() => { const td = allTickerData?.find((t) => t.symbol === pos.ticker); const price = getLivePrice(liveQuotes, pos.ticker, pos.currentPrice); const pc = liveQuotes?.[pos.ticker]?.previousClose ?? td?.previousClose ?? 0; const day = liveDayChange(price, pc); const posGL = livePositionGL(pos.totalShares, pos.avgCostBasis, price); return <><td className={`px-3 py-2 text-right ${glColor(day.chg)}`}>{fmtUsd(price)}<div className="text-[10px]">{pc > 0 ? fmtPctAbs(day.pct) : ""}</div></td><td className="px-3 py-2 text-right text-gray-300">{fmtUsd(posGL.mv)}</td><td className={`px-3 py-2 text-right font-medium ${glColor(posGL.gl)}`}>{fmtUsdAbs(posGL.gl)}</td><td className={`px-3 py-2 text-right font-medium ${glColor(posGL.glPct)}`}>{fmtPctAbs(posGL.glPct)}</td></>; })()}
-                    <td className="px-3 py-2 text-right text-gray-500">{pos.lots}</td>
+                    <td className="px-3 py-2 text-right text-gray-300">{pos.totalShares.toLocaleString()}<div className="text-[10px] text-gray-600">{pos.lots} lot{pos.lots !== 1 ? "s" : ""}</div></td>
+                    <td className="px-3 py-2 text-right text-yellow-200/70">{fmtUsd(pos.avgCostBasis)}</td>
+                    {(() => {
+                      const td = allTickerData?.find((t) => t.symbol === pos.ticker);
+                      const price = getLivePrice(liveQuotes, pos.ticker, pos.currentPrice);
+                      const pc = liveQuotes?.[pos.ticker]?.previousClose ?? td?.previousClose ?? 0;
+                      const day = liveDayChange(price, pc);
+                      const posGL = livePositionGL(pos.totalShares, pos.avgCostBasis, price);
+                      const fund = bulkFundamentals?.[pos.ticker];
+                      const lo = fund?.fiftyTwoWeekLow ?? 0;
+                      const hi = fund?.fiftyTwoWeekHigh ?? 0;
+                      const range = hi - lo;
+                      const pct52 = range > 0 ? ((price - lo) / range) * 100 : 50;
+                      return <>
+                        <td className={`px-3 py-2 text-right ${glColor(day.chg)}`}>{fmtUsd(price)}<div className="text-[10px]">{pc > 0 ? fmtPctAbs(day.pct) : ""}</div></td>
+                        <td className="px-3 py-2">
+                          {lo > 0 && hi > 0 ? (
+                            <div className="flex flex-col items-center gap-0.5">
+                              <div className="flex items-center justify-between w-full text-[9px] text-gray-600">
+                                <span>{fmtUsd(lo)}</span>
+                                <span>{fmtUsd(hi)}</span>
+                              </div>
+                              {(() => {
+                                const costPct = range > 0 ? ((pos.avgCostBasis - lo) / range) * 100 : 50;
+                                return (
+                              <div className="relative w-full h-1.5 bg-gray-800 rounded-full">
+                                <div className="absolute top-0 left-0 h-full bg-gray-700 rounded-full" style={{ width: `${Math.min(100, Math.max(0, pct52))}%` }} />
+                                {pos.avgCostBasis >= lo && pos.avgCostBasis <= hi && (
+                                  <div className="absolute w-[2px] bg-yellow-200/70 z-10" style={{ left: `${Math.min(100, Math.max(0, costPct))}%`, top: "-3px", bottom: "-3px", transform: "translateX(-50%)" }} />
+                                )}
+                                <div className={`absolute w-2 h-2 rounded-full shadow ${day.chg > 0 ? "bg-emerald-400" : day.chg < 0 ? "bg-red-400" : "bg-gray-400"}`} style={{ left: `calc(${Math.min(100, Math.max(0, pct52))}% - 4px)`, top: "-1.25px" }} />
+                              </div>
+                                );
+                              })()}
+                            </div>
+                          ) : <span className="text-gray-600">—</span>}
+                        </td>
+                        <td className="px-3 py-2 text-right text-gray-300">{fmtUsd(posGL.mv)}</td>
+                        <td className={`px-3 py-2 text-right font-medium ${glColor(posGL.gl)}`}>{fmtUsdAbs(posGL.gl)}</td>
+                        <td className={`px-3 py-2 text-right font-medium ${glColor(posGL.glPct)}`}>{fmtPctAbs(posGL.glPct)}</td>
+                      </>;
+                    })()}
                     <td className="px-3 py-2 text-right text-gray-300">{bulkFundamentals?.[pos.ticker]?.trailingPE?.toFixed(1) ?? "—"}</td>
                     <td className="px-3 py-2 text-right text-gray-300">{fmtDividendYield(bulkFundamentals?.[pos.ticker]?.dividendYield)}</td>
-                    {(() => { const v = allTickerData?.find((t) => t.symbol === pos.ticker)?.volatility30d ?? 0; return <td className={`px-3 py-2 text-right ${volatilityColor(v)}`}>{v.toFixed(1)}%</td>; })()}
+                    {(() => { const v = allTickerData?.find((t) => t.symbol === pos.ticker)?.volatility30d ?? 0; return <td className={`px-3 py-2 text-right border-l border-gray-800 ${volatilityColor(v)}`}>{v.toFixed(1)}%</td>; })()}
                     <td className="px-3 py-2 text-center">
                       <span className={`px-1.5 py-0.5 rounded-full font-bold ${gradeColor(pos.entryGrade)}`}>{pos.entryGrade}</span>
                       <div className="text-[10px] text-gray-600">{pos.entryGradeScore.toFixed(0)}</div>
