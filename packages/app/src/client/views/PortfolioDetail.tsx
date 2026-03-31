@@ -66,6 +66,13 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
   const { data: quoteStats } = trpc.getQuoteStats.useQuery(undefined, { refetchInterval: polling ? 300_000 : false });
   const getSortVal = (pos: any, col: string) => {
     if (col === "52wk") { const f = bulkFundamentals?.[pos.ticker]; const lo = f?.fiftyTwoWeekLow ?? 0; const hi = f?.fiftyTwoWeekHigh ?? 0; const price = getLivePrice(liveQuotes, pos.ticker, pos.currentPrice); return hi > lo ? (price - lo) / (hi - lo) : 0; }
+    if (col === "unrealizedGL" || col === "unrealizedGLPercent") {
+      const price = getLivePrice(liveQuotes, pos.ticker, pos.currentPrice);
+      const gl = livePositionGL(pos.totalShares, pos.avgCostBasis, price);
+      return col === "unrealizedGL" ? gl.gl : gl.glPct;
+    }
+    if (col === "marketValue") { const price = getLivePrice(liveQuotes, pos.ticker, pos.currentPrice); return pos.totalShares * price; }
+    if (col === "currentPrice") return getLivePrice(liveQuotes, pos.ticker, pos.currentPrice);
     if (col === "pe") return bulkFundamentals?.[pos.ticker]?.trailingPE ?? 0;
     if (col === "yield") return bulkFundamentals?.[pos.ticker]?.dividendYield ?? 0;
     if (col === "volatility") return allTickerData?.find((t: any) => t.symbol === pos.ticker)?.volatility30d ?? 0;
@@ -80,13 +87,20 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
     return sortDir === "asc" ? cmp : -cmp;
   });
 
-  // Backfill state
+  // Backfill state — use earliest lot date across all positions as baseline
   const cutoffDate = portfolio?.cutoffDate || "2024-01-01";
+  const earliestLotDate = positions?.reduce((earliest, p) => {
+    const lots = (p as any).lots ?? [];
+    for (const lot of lots) {
+      if (lot.transactionDate && lot.transactionDate < earliest) earliest = lot.transactionDate;
+    }
+    return earliest;
+  }, cutoffDate) ?? cutoffDate;
   const [backfillStatus, setBackfillStatus] = useState<Record<string, { loading: boolean; result?: string }>>({});
   const [backfillingAll, setBackfillingAll] = useState(false);
   const recomputeMutation = trpc.recomputeAllIndicators.useMutation();
   const [backfillFrom, setBackfillFrom] = useState<string | null>(null);
-  const effectiveBackfillFrom = backfillFrom ?? cutoffDate;
+  const effectiveBackfillFrom = backfillFrom ?? earliestLotDate;
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -113,12 +127,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
         ...s,
         [symbol]: { loading: false, result: result.success ? `${result.count} prices` : `Failed` },
       }));
-      utils.getTickers.invalidate();
-      utils.getTicker.invalidate();
-      utils.getTickerPrices.invalidate();
-      utils.getMissingPrices.invalidate();
-      utils.getPriceDateRange.invalidate();
-      utils.getPortfolioSummary.invalidate();
+      utils.invalidate();
     } catch (e) {
       setBackfillStatus((s) => ({ ...s, [symbol]: { loading: false, result: `Error` } }));
     }
@@ -130,8 +139,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
     for (const t of tickerList) await handleBackfill(t);
     // Auto-recompute signals after backfill
     await recomputeMutation.mutateAsync();
-    utils.getPortfolioSummary.invalidate();
-    utils.getPosition.invalidate();
+    utils.invalidate();
     setBackfillingAll(false);
   };
   const [autoBackfilling, setAutoBackfilling] = useState(false);
@@ -148,11 +156,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
         try { await backfillMutation.mutateAsync({ symbol: t, fromDate: target, toDate: target }); } catch {}
       }
       await recomputeMutation.mutateAsync();
-      utils.getTickers.invalidate();
-      utils.getTicker.invalidate();
-      utils.getQuotes.invalidate();
-      utils.getPortfolioSummary.invalidate();
-      utils.getPosition.invalidate();
+      utils.invalidate();
       setAutoBackfilling(false);
     })();
   }, [allTickerData, positions]);
@@ -293,14 +297,21 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
                     <InfoTip>
                       <div className="space-y-1.5">
                         <div className="text-gray-300 font-medium">Entry Grade</div>
-                        <div className="text-gray-400 text-[11px] leading-tight">Composite of RSI, Bollinger, MA trend, timing, and volume at entry</div>
-                        <table className="font-mono text-[11px]">
+                        <div className="text-gray-400 text-[11px] leading-tight">Evaluates entry quality using Minervini/O'Neil trend-following methodology. Qty-weighted average across all lots.</div>
+                        <table className="text-[11px] w-full">
                           <tbody>
-                            <tr><td className="text-emerald-400 pr-2">A</td><td>85+ — excellent entry</td></tr>
-                            <tr><td className="text-emerald-400 pr-2">B</td><td>70+ — good entry</td></tr>
-                            <tr><td className="text-amber-400 pr-2">C</td><td>55+ — average entry</td></tr>
-                            <tr><td className="text-red-400 pr-2">D</td><td>40+ — poor entry</td></tr>
-                            <tr><td className="text-red-400 pr-2">F</td><td>&lt;40 — bad entry</td></tr>
+                            <tr><td className="text-gray-500 pr-2">Trend (40%)</td><td className="text-gray-300">MA50 {'>'} MA200 (golden cross), price above MA50, MA50 rising</td></tr>
+                            <tr><td className="text-gray-500 pr-2">Value (30%)</td><td className="text-gray-300">Entry near MA50 support or lower Bollinger band</td></tr>
+                            <tr><td className="text-gray-500 pr-2">Timing (30%)</td><td className="text-gray-300">RSI pullback (30-50 ideal), entry near period low</td></tr>
+                          </tbody>
+                        </table>
+                        <table className="font-mono text-[11px] mt-1">
+                          <tbody>
+                            <tr><td className="text-emerald-400 pr-2">A</td><td>80+ — pullback in confirmed uptrend near support</td></tr>
+                            <tr><td className="text-emerald-400 pr-2">B</td><td>65+ — trend-aligned at reasonable price</td></tr>
+                            <tr><td className="text-amber-400 pr-2">C</td><td>50+ — some factors favorable</td></tr>
+                            <tr><td className="text-red-400 pr-2">D</td><td>35+ — weak trend or poor value</td></tr>
+                            <tr><td className="text-red-400 pr-2">F</td><td>&lt;35 — against trend, extended, bad timing</td></tr>
                           </tbody>
                         </table>
                       </div>

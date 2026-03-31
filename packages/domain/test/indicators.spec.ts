@@ -365,18 +365,16 @@ describe("Entry Grade", () => {
     const prices = genPrices(200);
     const entryDate = prices[100].date;
     const result = computeEntryGrade(prices, prices[100].close, entryDate);
-    expect(result.rsiScore).toBeGreaterThanOrEqual(0);
-    expect(result.bollingerScore).toBeGreaterThanOrEqual(0);
-    expect(result.maTrendScore).toBeGreaterThanOrEqual(0);
+    expect(result.trendScore).toBeGreaterThanOrEqual(0);
+    expect(result.valueScore).toBeGreaterThanOrEqual(0);
     expect(result.timingScore).toBeGreaterThanOrEqual(0);
-    expect(result.volumeScore).toBeGreaterThanOrEqual(0);
   });
 
-  it("handles custom entry volume", () => {
+  it("handles entry with moderate data", () => {
     const prices = genPrices(200);
     const entryDate = prices[100].date;
-    const result = computeEntryGrade(prices, prices[100].close, entryDate, 5000000);
-    expect(result.volumeScore).toBeGreaterThanOrEqual(0);
+    const result = computeEntryGrade(prices, prices[100].close, entryDate);
+    expect(result.valueScore).toBeGreaterThanOrEqual(0);
   });
 
   it("handles entry with very few prior prices", () => {
@@ -389,30 +387,27 @@ describe("Entry Grade", () => {
 
 describe("Grade Explanation", () => {
   it("explains good grade", () => {
-    const factors = { rsiScore: 80, bollingerScore: 75, maTrendScore: 80, timingScore: 90, volumeScore: 80, total: 80, grade: "B" as const };
+    const factors = { trendScore: 80, valueScore: 75, timingScore: 90, total: 80, grade: "A" as const };
     const text = gradeExplanation(factors);
-    expect(text).toContain("Grade B");
-    expect(text).toContain("RSI was favorable");
-    expect(text).toContain("uptrend");
-    expect(text).toContain("near period low");
-    expect(text).toContain("near Bollinger support");
-    expect(text).toContain("volume confirmed");
+    expect(text).toContain("Grade A");
+    expect(text).toContain("buying with the trend");
+    expect(text).toContain("good value entry");
+    expect(text).toContain("well-timed pullback");
   });
 
   it("explains poor grade", () => {
-    const factors = { rsiScore: 10, bollingerScore: 20, maTrendScore: 20, timingScore: 15, volumeScore: 30, total: 18, grade: "F" as const };
+    const factors = { trendScore: 20, valueScore: 20, timingScore: 15, total: 18, grade: "F" as const };
     const text = gradeExplanation(factors);
     expect(text).toContain("Grade F");
-    expect(text).toContain("overbought");
-    expect(text).toContain("downtrend");
-    expect(text).toContain("near period high");
-    expect(text).toContain("near Bollinger resistance");
+    expect(text).toContain("against the trend");
+    expect(text).toContain("extended from support");
+    expect(text).toContain("bought near peak");
   });
 
-  it("explains mixed signals", () => {
-    const factors = { rsiScore: 50, bollingerScore: 50, maTrendScore: 50, timingScore: 50, volumeScore: 50, total: 50, grade: "C" as const };
+  it("explains neutral grade", () => {
+    const factors = { trendScore: 50, valueScore: 50, timingScore: 50, total: 50, grade: "C" as const };
     const text = gradeExplanation(factors);
-    expect(text).toContain("mixed signals");
+    expect(text).toContain("trend neutral");
   });
 });
 

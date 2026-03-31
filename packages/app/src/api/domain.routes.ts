@@ -307,11 +307,13 @@ export const domainRouter = t.router({
       const range = periodHigh - periodLow;
       const timingScore = range > 0 ? ((actualAvgEntry - periodLow) / range) * 100 : 50;
 
-      // Per-lot analysis
+      // Per-lot analysis with entry grade factors
+      const { computeEntryGrade } = await import("@rotorsoft/portfolio-tracker-domain");
       const lots = buyLots.map((lot) => {
         const lotTimingScore = range > 0 ? 100 - ((lot.price - periodLow) / range) * 100 : 50;
         const vsAvg = lot.price - periodAvg;
         const vsAvgPct = periodAvg > 0 ? (vsAvg / periodAvg) * 100 : 0;
+        const factors = computeEntryGrade(allPrices, lot.price, lot.transactionDate);
         return {
           lotId: lot.id,
           date: lot.transactionDate,
@@ -323,8 +325,16 @@ export const domainRouter = t.router({
           grade: lot.grade || "C",
           gradeScore: lot.gradeScore || 0,
           gradeExplanation: lot.gradeExplanation || "",
+          factors,
         };
       });
+
+      // Position-level weighted factors
+      const posFactors = {
+        trendScore: Math.round(lots.reduce((s, l) => s + l.factors.trendScore * l.quantity, 0) / totalShares),
+        valueScore: Math.round(lots.reduce((s, l) => s + l.factors.valueScore * l.quantity, 0) / totalShares),
+        timingScore: Math.round(lots.reduce((s, l) => s + l.factors.timingScore * l.quantity, 0) / totalShares),
+      };
 
       return {
         position: pos,
@@ -337,6 +347,7 @@ export const domainRouter = t.router({
           dcaSavings,
           dcaSavingsPct: totalCost > 0 ? (dcaSavings / totalCost) * 100 : 0,
           timingScore,
+          posFactors,
           lots,
         },
       };

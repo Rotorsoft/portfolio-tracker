@@ -55,19 +55,31 @@ export function Tooltip({ label, children, className, icon, block }: {
         </span>
       )}
       {show && rect && createPortal(
-        <div
-          className="fixed z-[9999]"
-          style={{ top: rect.bottom, left: rect.left + rect.width / 2, transform: "translateX(-50%)" }}
-          onMouseEnter={() => { portalHover.current = true; }}
-          onMouseLeave={() => { portalHover.current = false; check(); }}
-        >
-          <div className="pt-1.5">
-            <div className={`relative bg-gray-800 border border-gray-700 rounded-md shadow-xl ${isRich || isLong ? "max-w-md px-3 py-2.5 text-xs text-gray-300 leading-relaxed" : "px-2.5 py-1.5 text-xs text-gray-300 whitespace-nowrap"}`}>
-              <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-800 border-l border-t border-gray-700 rotate-45" />
-              {label}
+        (() => {
+          const cx = rect.left + rect.width / 2;
+          const spaceBelow = window.innerHeight - rect.bottom;
+          const spaceAbove = rect.top;
+          const flipUp = spaceBelow < 150 && spaceAbove > spaceBelow;
+          const maxW = (isRich || isLong) ? 448 : 300; // max-w-md = 28rem = 448px
+          const left = Math.max(8, Math.min(cx, window.innerWidth - maxW / 2 - 8));
+          return <div
+            className="fixed z-[9999]"
+            style={flipUp
+              ? { bottom: window.innerHeight - rect.top, left, transform: "translateX(-50%)" }
+              : { top: rect.bottom, left, transform: "translateX(-50%)" }}
+            onMouseEnter={() => { portalHover.current = true; }}
+            onMouseLeave={() => { portalHover.current = false; check(); }}
+          >
+            <div className={flipUp ? "pb-1.5" : "pt-1.5"}>
+              <div className={`relative bg-gray-800 border border-gray-700 rounded-md shadow-xl ${isRich || isLong ? "max-w-md px-3 py-2.5 text-xs text-gray-300 leading-relaxed" : "px-2.5 py-1.5 text-xs text-gray-300 whitespace-nowrap"}`}>
+                {flipUp
+                  ? <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-800 border-r border-b border-gray-700 rotate-45" />
+                  : <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-800 border-l border-t border-gray-700 rotate-45" />}
+                {label}
+              </div>
             </div>
-          </div>
-        </div>,
+          </div>;
+        })(),
         document.body
       )}
     </Tag>

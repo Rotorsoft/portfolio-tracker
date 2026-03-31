@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Plus, X } from "lucide-react";
 import { trpc } from "../trpc.js";
-import { fmtDate } from "../fmt.js";
+import { fmtDate, fmtUsd, fmtUsdAbs, fmtPctAbs, glColor } from "../fmt.js";
 import { FormInput } from "../components/FormInput.js";
 import { ActionButton } from "../components/ActionButton.js";
 
@@ -54,34 +54,7 @@ export function PortfolioList({ onSelect }: { onSelect: (id: string) => void }) 
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {portfolios?.map((p) => (
-          <button
-            key={p.id}
-            onClick={() => onSelect(p.id)}
-            className="bg-gray-900 border border-gray-800 rounded-xl p-5 text-left hover:border-indigo-500/50 transition-colors group"
-          >
-            <div className="flex items-start justify-between">
-              <div>
-                <h3 className="font-semibold text-white group-hover:text-indigo-400 transition-colors">
-                  {p.name}
-                </h3>
-                {p.description && (
-                  <p className="text-sm text-gray-500 mt-1">{p.description}</p>
-                )}
-              </div>
-              <span className={`text-xs px-2 py-0.5 rounded-full ${
-                p.status === "active"
-                  ? "bg-emerald-500/10 text-emerald-400"
-                  : "bg-gray-700 text-gray-400"
-              }`}>
-                {p.status}
-              </span>
-            </div>
-            <div className="mt-3 text-xs text-gray-600">
-              {p.currency}
-              {p.cutoffDate && <> &middot; Since {fmtDate(p.cutoffDate)}</>}
-              {" "}&middot; Created {fmtDate(p.createdAt?.split("T")[0] ?? "")}
-            </div>
-          </button>
+          <PortfolioCard key={p.id} portfolio={p} onSelect={onSelect} />
         ))}
         {(!portfolios || portfolios.length === 0) && (
           <p className="text-gray-600 col-span-full text-center py-12">
@@ -90,5 +63,53 @@ export function PortfolioList({ onSelect }: { onSelect: (id: string) => void }) 
         )}
       </div>
     </div>
+  );
+}
+
+function PortfolioCard({ portfolio: p, onSelect }: { portfolio: any; onSelect: (id: string) => void }) {
+  const { data: summary } = trpc.getPortfolioSummary.useQuery({ portfolioId: p.id }, { staleTime: 60_000 });
+  const totalCost = summary?.totalCost ?? 0;
+  const totalValue = summary?.totalMarketValue ?? 0;
+  const gl = totalValue - totalCost;
+  const glPct = totalCost > 0 ? (gl / totalCost) * 100 : 0;
+  const posCount = summary?.positions?.length ?? 0;
+
+  return (
+    <button
+      onClick={() => onSelect(p.id)}
+      className="bg-gray-900 border border-gray-800 rounded-xl p-5 text-left hover:border-indigo-500/50 transition-colors group"
+    >
+      <div className="flex items-start justify-between">
+        <div>
+          <h3 className="font-semibold text-white group-hover:text-indigo-400 transition-colors">
+            {p.name}
+          </h3>
+          {p.description && (
+            <p className="text-sm text-gray-500 mt-1">{p.description}</p>
+          )}
+        </div>
+        <span className={`text-xs px-2 py-0.5 rounded-full ${
+          p.status === "active"
+            ? "bg-emerald-500/10 text-emerald-400"
+            : "bg-gray-700 text-gray-400"
+        }`}>
+          {p.status}
+        </span>
+      </div>
+      {summary && posCount > 0 && (
+        <div className="mt-3 flex items-baseline gap-4">
+          <span className="text-sm text-white font-medium">{fmtUsd(totalValue)}</span>
+          <span className={`text-xs font-medium ${glColor(gl)}`}>
+            {gl >= 0 ? "+" : ""}{fmtUsdAbs(gl)} ({fmtPctAbs(glPct)})
+          </span>
+          <span className="text-xs text-gray-600">{posCount} position{posCount !== 1 ? "s" : ""}</span>
+        </div>
+      )}
+      <div className="mt-2 text-xs text-gray-600">
+        {p.currency}
+        {p.cutoffDate && <> &middot; Since {fmtDate(p.cutoffDate)}</>}
+        {" "}&middot; Created {fmtDate(p.createdAt?.split("T")[0] ?? "")}
+      </div>
+    </button>
   );
 }

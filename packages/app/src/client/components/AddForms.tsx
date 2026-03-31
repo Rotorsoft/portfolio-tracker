@@ -4,6 +4,8 @@ import { trpc } from "../trpc.js";
 import { ActionButton } from "./ActionButton.js";
 import { DateInput } from "./DateInput.js";
 
+let lastLotDate = new Date().toISOString().split("T")[0];
+
 type AddFormsProps = {
   portfolioId: string;
   onDone: () => void;
@@ -27,6 +29,7 @@ export const AddTickersForm = memo(function AddTickersForm({ portfolioId, onDone
     utils.getPositionsByPortfolio.invalidate();
     utils.getPortfolioSummary.invalidate();
     utils.getTickers.invalidate();
+    utils.getTicker.invalidate();
     setAdding(false);
     onDone();
   };
@@ -44,13 +47,19 @@ export const AddTickersForm = memo(function AddTickersForm({ portfolioId, onDone
 });
 
 export const AddLotsForm = memo(function AddLotsForm({ portfolioId, onDone }: AddFormsProps) {
-  const [lotDate, setLotDate] = useState(new Date().toISOString().split("T")[0]);
+  const [lotDate, setLotDateState] = useState(lastLotDate);
+  const setLotDate = (v: string) => { lastLotDate = v; setLotDateState(v); };
   const [rowCount, setRowCount] = useState(3);
   const [adding, setAdding] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const openMutation = trpc.openPosition.useMutation();
   const addLotMutation = trpc.addLot.useMutation();
+  const recomputeMutation = trpc.recomputeAllIndicators.useMutation();
   const utils = trpc.useUtils();
+
+  const invalidateAll = () => {
+    utils.invalidate();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,9 +88,9 @@ export const AddLotsForm = memo(function AddLotsForm({ portfolioId, onDone }: Ad
         });
       } catch (err) { console.error(`Failed lot for ${row.ticker}:`, err); }
     }
-    utils.getPositionsByPortfolio.invalidate();
-    utils.getPortfolioSummary.invalidate();
-    utils.getTickers.invalidate();
+    invalidateAll();
+    try { await recomputeMutation.mutateAsync(); } catch {}
+    invalidateAll();
     setAdding(false);
     onDone();
   };
@@ -156,16 +165,7 @@ export const AddSingleLotForm = memo(function AddSingleLotForm({ portfolioId, ti
   const utils = trpc.useUtils();
 
   const invalidateAll = () => {
-    utils.getPosition.invalidate();
-    utils.getPositionsByPortfolio.invalidate();
-    utils.getPortfolioSummary.invalidate();
-    utils.getEntryAnalysis.invalidate();
-    utils.getTickers.invalidate();
-    utils.getTicker.invalidate();
-    utils.getQuotes.invalidate();
-    utils.getTickerPrices.invalidate();
-    utils.getChartOverlays.invalidate();
-    utils.getWhatIfComparison.invalidate();
+    utils.invalidate();
   };
 
   const invalidateAndRecompute = async () => {
@@ -241,7 +241,7 @@ export const AddSingleLotForm = memo(function AddSingleLotForm({ portfolioId, ti
         <form ref={formRef} onSubmit={handleAddLot} className="space-y-3">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <select name="type" defaultValue="buy" className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"><option value="buy">Buy</option><option value="sell">Sell</option></select>
-            <input type="date" name="transaction_date" defaultValue={new Date().toISOString().split("T")[0]} className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white" />
+            <input type="date" name="transaction_date" defaultValue={lastLotDate} onChange={(e) => { lastLotDate = e.target.value; }} className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white" />
             <input type="number" name="quantity" placeholder="Quantity" step="any" min="0.0001" autoComplete="off" className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500" required />
             <input type="number" name="price" placeholder="Price" step="0.01" min="0.01" autoComplete="off" className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500" required />
           </div>

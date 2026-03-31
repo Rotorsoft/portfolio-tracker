@@ -109,7 +109,7 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, di
         // Group 2: Analysis — col1 = entry, col2 = signal
         const analCol1: KV[] = [];
         if (a) {
-          analCol1.push({ label: "Grade Score", value: `${gradeScore.toFixed(0)}/100`, color: gradeText, tooltip: "Weighted composite of RSI (25%), Bollinger position (20%), MA trend (20%), price timing (20%), and volume (15%) at time of your average entry." });
+          analCol1.push({ label: "Grade Score", value: `${gradeScore.toFixed(0)}/100`, color: gradeText, tooltip: "Entry quality based on 3 factors: Trend (40%) — were you buying with the trend? Value (30%) — did you get a good price near support? Timing (30%) — did you buy on a pullback? Based on Minervini/O'Neil trend-following methodology." });
           analCol1.push({ label: "Timing Score", value: `${a.timingScore.toFixed(0)}%`, color: a.timingScore >= 66 ? "text-emerald-400" : a.timingScore >= 33 ? "text-amber-400" : "text-red-400", tooltip: "Where your average entry price sits in the price range during your holding period. 100% = you bought at the period low (perfect timing). 0% = you bought at the period high. Above 66% is great, below 33% is poor." });
           analCol1.push({ label: "vs DCA", value: `${Math.abs(a.dcaSavingsPct).toFixed(1)}%`, color: glColor(a.dcaSavingsPct), tooltip: "Compares your actual average entry price to what it would have been if you had dollar-cost averaged (bought equal amounts every trading day from your first to last lot). Green = you beat DCA. Red = DCA would have been cheaper." });
           analCol1.push({ label: "Max Drawdown", value: position.maxDrawdown > 0 ? `${position.maxDrawdown.toFixed(1)}% (${position.daysUnderwater}d)` : "—", color: "text-red-400", tooltip: "The largest peak-to-trough percentage decline since your first purchase. Days underwater = total trading days the price closed below your average entry. Lower is better — indicates less pain during your holding period." });
@@ -161,20 +161,38 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, di
                   <div className={`shrink-0 flex items-stretch self-stretch ${gradeText.includes("emerald") ? "bg-emerald-500/20" : gradeText.includes("amber") ? "bg-amber-500/20" : "bg-red-500/20"}`}>
                     <div className="w-6 flex flex-col items-center justify-center gap-1">
                       <span className="text-[9px] font-bold uppercase tracking-widest text-gray-500" style={{ writingMode: "vertical-lr", transform: "rotate(180deg)" }}>Entry Grade</span>
-                      <Tooltip icon label={<div className="space-y-2">
+                      <Tooltip icon label={(() => {
+                        const pf = entry?.analysis?.posFactors;
+                        const trendS = pf?.trendScore ?? 50;
+                        const valueS = pf?.valueScore ?? 50;
+                        const timingS = pf?.timingScore ?? 50;
+                        const colorFor = (v: number) => v >= 70 ? "text-emerald-400" : v >= 40 ? "text-amber-400" : "text-red-400";
+                        return <div className="space-y-2">
                         <div className="text-gray-200 font-semibold">Entry Grade <span className={gradeText}>{grade}</span> <span className="text-gray-500 font-normal">({gradeScore.toFixed(0)}/100)</span></div>
-                        <div className="text-[10px] text-gray-400">Evaluated at time of purchase (avg lot entry)</div>
+                        <div className="text-[10px] text-gray-400">Qty-weighted avg of {(position.lots ?? []).filter((l: any) => l.type === "buy").length} lot(s) — Minervini/O'Neil methodology</div>
                         <table className="text-[11px] w-full">
                           <tbody>
-                            <tr><td className="text-gray-500 pr-3 py-0.5">RSI at entry</td><td className={`text-right ${(position.rsiAtEntry ?? 50) < 30 ? "text-emerald-400" : (position.rsiAtEntry ?? 50) > 70 ? "text-red-400" : "text-gray-300"}`}>{position.rsiAtEntry?.toFixed(0) ?? "?"}</td><td className="text-gray-600 pl-2">{(position.rsiAtEntry ?? 50) < 30 ? "oversold" : (position.rsiAtEntry ?? 50) > 70 ? "overbought" : "neutral"}</td></tr>
-                            <tr><td className="text-gray-500 pr-3 py-0.5">Bollinger</td><td className={`text-right ${(position.bollingerPctAtEntry ?? 50) > 70 ? "text-emerald-400" : (position.bollingerPctAtEntry ?? 50) < 30 ? "text-red-400" : "text-gray-300"}`}>{position.bollingerPctAtEntry?.toFixed(0) ?? "?"}%</td><td className="text-gray-600 pl-2">{(position.bollingerPctAtEntry ?? 50) > 70 ? "near support" : (position.bollingerPctAtEntry ?? 50) < 30 ? "near resistance" : "mid-range"}</td></tr>
-                            <tr><td className="text-gray-500 pr-3 py-0.5">MA trend</td><td className={`text-right ${position.ma50AtEntry > position.ma200AtEntry && position.ma200AtEntry > 0 ? "text-emerald-400" : position.ma50AtEntry < position.ma200AtEntry && position.ma200AtEntry > 0 ? "text-red-400" : "text-gray-300"}`}>{position.ma50AtEntry > position.ma200AtEntry && position.ma200AtEntry > 0 ? "uptrend" : position.ma50AtEntry < position.ma200AtEntry && position.ma200AtEntry > 0 ? "downtrend" : "—"}</td><td className="text-gray-600 pl-2">{position.ma50AtEntry > position.ma200AtEntry && position.ma200AtEntry > 0 ? "golden cross" : position.ma50AtEntry < position.ma200AtEntry && position.ma200AtEntry > 0 ? "death cross" : "converging"}</td></tr>
-                            <tr><td className="text-gray-500 pr-3 py-0.5">Timing</td><td className={`text-right ${(a?.timingScore ?? 50) >= 66 ? "text-emerald-400" : (a?.timingScore ?? 50) >= 33 ? "text-amber-400" : "text-red-400"}`}>{a?.timingScore.toFixed(0)}%</td><td className="text-gray-600 pl-2">100%=low, 0%=high</td></tr>
+                            <tr>
+                              <td className="text-gray-500 pr-3 py-0.5">Trend (40%)</td>
+                              <td className={`text-right font-medium ${colorFor(trendS)}`}>{trendS}</td>
+                              <td className="text-gray-600 pl-2">{trendS >= 70 ? "MA50 > MA200, price above MA50, MA50 rising" : trendS >= 40 ? "partial trend — some MAs aligned" : "against trend — death cross or below MAs"}</td>
+                            </tr>
+                            <tr>
+                              <td className="text-gray-500 pr-3 py-0.5">Value (30%)</td>
+                              <td className={`text-right font-medium ${colorFor(valueS)}`}>{valueS}</td>
+                              <td className="text-gray-600 pl-2">{valueS >= 70 ? "near MA50 support / lower Bollinger" : valueS >= 40 ? "mid-range — fair price" : "extended above MA50 / upper Bollinger"}</td>
+                            </tr>
+                            <tr>
+                              <td className="text-gray-500 pr-3 py-0.5">Timing (30%)</td>
+                              <td className={`text-right font-medium ${colorFor(timingS)}`}>{timingS}</td>
+                              <td className="text-gray-600 pl-2">{timingS >= 70 ? "RSI pullback (30-50) + near period low" : timingS >= 40 ? "neutral RSI / mid-range entry" : "RSI overbought (>70) or near period high"}</td>
+                            </tr>
                           </tbody>
                         </table>
-                        <div className={`text-[11px] font-medium ${gradeText}`}>{grade === "A" ? "Excellent entry — most factors aligned favorably" : grade === "B" ? "Good entry — majority of factors favorable" : grade === "C" ? "Average entry — mixed signals at purchase" : grade === "D" ? "Below average — unfavorable conditions" : "Poor entry — most factors unfavorable"}</div>
-                        <div className="text-[10px] flex gap-2"><span className="text-emerald-400">A ≥85</span><span className="text-emerald-400">B ≥70</span><span className="text-amber-400">C ≥55</span><span className="text-red-400">D ≥40</span><span className="text-red-400">F &lt;40</span></div>
-                      </div>}><span /></Tooltip>
+                        <div className={`text-[11px] font-medium ${gradeText}`}>{grade === "A" ? "Excellent — bought pullback in confirmed uptrend near support" : grade === "B" ? "Good — trend-aligned entry at reasonable price" : grade === "C" ? "Average — some factors favorable" : grade === "D" ? "Below average — weak trend or poor value" : "Poor — against trend, extended, or bad timing"}</div>
+                        <div className="text-[10px] flex gap-2"><span className="text-emerald-400">A ≥80</span><span className="text-emerald-400">B ≥65</span><span className="text-amber-400">C ≥50</span><span className="text-red-400">D ≥35</span><span className="text-red-400">F &lt;35</span></div>
+                      </div>;
+                      })()}><span /></Tooltip>
                     </div>
                     <div className="w-8 flex items-center justify-center"><span className={`text-2xl font-bold ${gradeText}`} style={{ writingMode: "vertical-lr", transform: "rotate(180deg)" }}>{grade}</span></div>
                   </div>
@@ -304,8 +322,19 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, di
                         {(() => {
                           const lg = lotGradeMap.get(lot.id);
                           if (!lg) return <span className="text-gray-600">—</span>;
+                          const f = lg.factors;
+                          const colorFor = (v: number) => v >= 70 ? "text-emerald-400" : v >= 40 ? "text-amber-400" : "text-red-400";
                           return (
-                            <Tooltip label={lg.gradeExplanation}>
+                            <Tooltip label={f ? <div className="space-y-1">
+                              <div className="text-gray-200 font-semibold">{lg.gradeExplanation}</div>
+                              <table className="text-[11px]">
+                                <tbody>
+                                  <tr><td className="text-gray-500 pr-2">Trend</td><td className={`text-right font-medium ${colorFor(f.trendScore)}`}>{f.trendScore}</td><td className="text-gray-600 pl-2">{f.trendScore >= 70 ? "with trend" : f.trendScore >= 40 ? "neutral" : "against"}</td></tr>
+                                  <tr><td className="text-gray-500 pr-2">Value</td><td className={`text-right font-medium ${colorFor(f.valueScore)}`}>{f.valueScore}</td><td className="text-gray-600 pl-2">{f.valueScore >= 70 ? "near support" : f.valueScore >= 40 ? "fair" : "extended"}</td></tr>
+                                  <tr><td className="text-gray-500 pr-2">Timing</td><td className={`text-right font-medium ${colorFor(f.timingScore)}`}>{f.timingScore}</td><td className="text-gray-600 pl-2">{f.timingScore >= 70 ? "pullback" : f.timingScore >= 40 ? "neutral" : "peak"}</td></tr>
+                                </tbody>
+                              </table>
+                            </div> : lg.gradeExplanation}>
                               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded cursor-help ${gradeColor(lg.grade)}`}>{lg.grade}</span><span className="text-[10px] text-gray-600 ml-1">{lg.gradeScore.toFixed(0)}</span>
                             </Tooltip>
                           );

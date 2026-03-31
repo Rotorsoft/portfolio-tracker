@@ -247,62 +247,88 @@ export function signalExplanation(components: SignalComponents): string {
 }
 
 // ── Entry Grading ──
+// Simplified 3-factor model based on Minervini/O'Neil trend-following methodology:
+//   Trend (40%)  — Are you buying with the trend?
+//   Value (30%)  — Did you get a good price within the trend?
+//   Timing (30%) — Did you buy on a pullback, not at a peak?
 
 export type EntryGrade = "A" | "B" | "C" | "D" | "F";
 export type EntryFactors = {
-  rsiScore: number;       // 0-100
-  bollingerScore: number; // 0-100
-  maTrendScore: number;   // 0-100
-  timingScore: number;    // 0-100 (price range position)
-  volumeScore: number;    // 0-100
-  total: number;          // weighted 0-100
+  trendScore: number;   // 0-100: MA alignment, price above MAs
+  valueScore: number;   // 0-100: entry price relative to support (MA50, Bollinger)
+  timingScore: number;  // 0-100: RSI + position within recent range
+  total: number;        // weighted 0-100
   grade: EntryGrade;
 };
 
-export function computeEntryGrade(prices: Price[], entryPrice: number, entryDate: string, entryVolume?: number): EntryFactors {
+export function computeEntryGrade(prices: Price[], entryPrice: number, entryDate: string): EntryFactors {
   const upTo = prices.filter((p) => p.date <= entryDate);
 
-  // RSI at entry (25%)
-  const rsiVal = rsi(upTo);
-  const rsiGrade = rsiVal < 30 ? 100 : rsiVal < 50 ? 80 - (rsiVal - 30) * 1.5 : rsiVal < 70 ? 50 - (rsiVal - 50) * 1.5 : 0;
-
-  // Bollinger position at entry (20%)
-  const bbPos = bollingerPositionAtDate(prices, 20, entryDate);
-  const bbGrade = (1 - bbPos) * 100; // lower = better for buying
-
-  // MA trend at entry (20%)
+  // ── Trend (40%) — Is the stock in a confirmed uptrend? ──
+  // Golden cross (MA50 > MA200) = strong uptrend
+  // Price above MA50 = participating in trend
+  // MA50 rising = trend accelerating
   const ma50 = smaAtDate(prices, 50, entryDate);
   const ma200 = smaAtDate(prices, 200, entryDate);
   const golden = ma50 > ma200 && ma200 > 0;
   const death = ma50 < ma200 && ma200 > 0;
-  const belowMa50 = entryPrice < ma50 * 0.98;
-  const maTrendGrade = golden && belowMa50 ? 100 : golden ? 70 : !golden && !death ? 50 : death && entryPrice < ma50 ? 30 : 0;
+  const aboveMa50 = ma50 > 0 && entryPrice >= ma50;
+  const ma50Prior = upTo.length >= 55 ? smaAtDate(prices, 50, upTo[upTo.length - 6]?.date ?? entryDate) : 0;
+  const ma50Rising = ma50Prior > 0 && ma50 > ma50Prior;
 
-  // Timing score — price vs period range (20%)
+  let trendScore = 0;
+  if (golden) trendScore += 40;                    // uptrend confirmed
+  else if (!death) trendScore += 20;               // neutral/converging
+  if (aboveMa50) trendScore += 30;                 // participating in trend
+  if (ma50Rising) trendScore += 30;                // trend accelerating
+  trendScore = Math.min(100, trendScore);
+
+  // ── Value (30%) — Did you buy at a good price within the trend? ──
+  // Near MA50 support or lower Bollinger = good value
+  // Far above MA50 or upper Bollinger = chasing
+  const bbPos = bollingerPositionAtDate(prices, 20, entryDate);
+  const distFromMa50 = ma50 > 0 ? (entryPrice - ma50) / ma50 * 100 : 0;
+
+  // Best value: within 2% of MA50 in uptrend, or lower half of Bollinger bands
+  let valueScore = 0;
+  const bbValue = Math.max(0, (1 - bbPos) * 100);  // lower band = 100, upper = 0
+  const maValue = distFromMa50 <= 0 ? 100           // below MA50 = great value
+    : distFromMa50 <= 2 ? 80                        // within 2% above = good
+    : distFromMa50 <= 5 ? 60                        // within 5% = fair
+    : distFromMa50 <= 10 ? 30                       // stretching
+    : 0;                                             // extended
+  valueScore = bbValue * 0.5 + maValue * 0.5;
+
+  // ── Timing (30%) — Did you buy on a pullback, not at a peak? ──
+  // RSI 30-50 in uptrend = ideal pullback entry
+  // RSI < 30 = oversold (great for mean-reversion)
+  // RSI > 70 = overbought (poor timing)
+  // Also: entry near period low = better timing
+  const rsiVal = rsi(upTo);
   const relevant = prices.filter((p) => p.date >= entryDate);
-  const periodWithEntry = [...upTo.slice(-20), ...relevant.slice(0, 20)]; // context around entry
+  const periodWithEntry = [...upTo.slice(-20), ...relevant.slice(0, 20)];
   const low = periodWithEntry.reduce((m, p) => Math.min(m, p.low), Infinity);
   const high = periodWithEntry.reduce((m, p) => Math.max(m, p.high), 0);
   const range = high - low;
-  const timingGrade = range > 0 ? Math.max(0, Math.min(100, 100 - ((entryPrice - low) / range) * 100)) : 50;
+  const rangePct = range > 0 ? Math.max(0, Math.min(100, 100 - ((entryPrice - low) / range) * 100)) : 50;
 
-  // Volume confirmation (15%)
-  const avgVol = upTo.length >= 21 ? upTo.slice(-21, -1).reduce((s, p) => s + p.volume, 0) / 20 : 0;
-  const entryDayVol = entryVolume ?? (upTo[upTo.length - 1]?.volume ?? 0);
-  const volRatio = avgVol > 0 ? entryDayVol / avgVol : 1;
-  // High volume + bullish context = good, high volume + bearish = bad
-  const bullishContext = rsiVal < 50 && (golden || (!golden && !death));
-  const volGrade = volRatio > 1.5 ? (bullishContext ? 90 : 20) : volRatio > 0.8 ? 50 : 30;
+  // RSI scoring: pullbacks (30-50) rewarded most in uptrends
+  const rsiScore = rsiVal < 30 ? 90               // oversold — great
+    : rsiVal < 40 ? 100                            // pullback sweet spot
+    : rsiVal < 50 ? 85                             // mild pullback
+    : rsiVal < 60 ? 60                             // neutral
+    : rsiVal < 70 ? 35                             // getting stretched
+    : 10;                                           // overbought
+  const timingScore = rsiScore * 0.5 + rangePct * 0.5;
 
-  const total = rsiGrade * 0.25 + bbGrade * 0.20 + maTrendGrade * 0.20 + timingGrade * 0.20 + volGrade * 0.15;
-  const grade: EntryGrade = total >= 85 ? "A" : total >= 70 ? "B" : total >= 55 ? "C" : total >= 40 ? "D" : "F";
+  // ── Total ──
+  const total = trendScore * 0.40 + valueScore * 0.30 + timingScore * 0.30;
+  const grade: EntryGrade = total >= 80 ? "A" : total >= 65 ? "B" : total >= 50 ? "C" : total >= 35 ? "D" : "F";
 
   return {
-    rsiScore: Math.round(rsiGrade),
-    bollingerScore: Math.round(bbGrade * 10) / 10,
-    maTrendScore: Math.round(maTrendGrade),
-    timingScore: Math.round(timingGrade * 10) / 10,
-    volumeScore: Math.round(volGrade),
+    trendScore: Math.round(trendScore),
+    valueScore: Math.round(valueScore),
+    timingScore: Math.round(timingScore),
     total: Math.round(total * 10) / 10,
     grade,
   };
@@ -311,16 +337,14 @@ export function computeEntryGrade(prices: Price[], entryPrice: number, entryDate
 /** Explain entry grade for tooltips */
 export function gradeExplanation(factors: EntryFactors): string {
   const parts: string[] = [];
-  if (factors.rsiScore >= 70) parts.push("RSI was favorable at entry");
-  else if (factors.rsiScore < 30) parts.push("RSI was overbought at entry");
-  if (factors.maTrendScore >= 70) parts.push("uptrend confirmed");
-  else if (factors.maTrendScore <= 30) parts.push("entered in downtrend");
-  if (factors.timingScore >= 70) parts.push("near period low");
-  else if (factors.timingScore < 30) parts.push("near period high");
-  if (factors.bollingerScore >= 70) parts.push("near Bollinger support");
-  else if (factors.bollingerScore < 30) parts.push("near Bollinger resistance");
-  if (factors.volumeScore >= 70) parts.push("volume confirmed");
-  return `Grade ${factors.grade} (${factors.total.toFixed(0)}/100): ${parts.join(", ") || "mixed signals"}`;
+  if (factors.trendScore >= 70) parts.push("buying with the trend");
+  else if (factors.trendScore >= 40) parts.push("trend neutral");
+  else parts.push("against the trend");
+  if (factors.valueScore >= 70) parts.push("good value entry");
+  else if (factors.valueScore < 30) parts.push("extended from support");
+  if (factors.timingScore >= 70) parts.push("well-timed pullback");
+  else if (factors.timingScore < 30) parts.push("bought near peak");
+  return `Grade ${factors.grade} (${factors.total.toFixed(0)}/100): ${parts.join(", ")}`;
 }
 
 // ── Existing Utilities ──

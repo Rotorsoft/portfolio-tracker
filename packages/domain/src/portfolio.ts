@@ -219,8 +219,16 @@ export async function recalcPositionAnalytics(positionId: string) {
     }).where(eq(lots.id, lot.id));
   }
 
-  // Entry grade (composite of RSI, Bollinger, MA trend, timing, volume at entry)
-  const entryGradeResult = computeEntryGrade(allPrices, avgEntry, firstDate);
+  // Entry grade — weighted average of per-lot grades for multi-lot positions
+  const lotGrades = buyLots.map((l) => ({ grade: computeEntryGrade(allPrices, l.price, l.transactionDate), qty: l.quantity }));
+  const weightedTotal = lotGrades.reduce((s, lg) => s + lg.grade.total * lg.qty, 0) / totalShares;
+  const entryGradeResult = {
+    total: Math.round(weightedTotal * 10) / 10,
+    grade: (weightedTotal >= 80 ? "A" : weightedTotal >= 65 ? "B" : weightedTotal >= 50 ? "C" : weightedTotal >= 35 ? "D" : "F") as "A" | "B" | "C" | "D" | "F",
+    trendScore: Math.round(lotGrades.reduce((s, lg) => s + lg.grade.trendScore * lg.qty, 0) / totalShares),
+    valueScore: Math.round(lotGrades.reduce((s, lg) => s + lg.grade.valueScore * lg.qty, 0) / totalShares),
+    timingScore: Math.round(lotGrades.reduce((s, lg) => s + lg.grade.timingScore * lg.qty, 0) / totalShares),
+  };
 
   await db().update(positions).set({
     timingScore, dcaSavingsPct, periodAvg, periodLow, periodHigh,
@@ -232,8 +240,8 @@ export async function recalcPositionAnalytics(positionId: string) {
     yearlyRangePct: Math.round(yrPct * 100) / 100,
     entryGrade: entryGradeResult.grade,
     entryGradeScore: entryGradeResult.total,
-    rsiAtEntry: entryGradeResult.rsiScore,
-    bollingerPctAtEntry: entryGradeResult.bollingerScore,
+    rsiAtEntry: entryGradeResult.trendScore,
+    bollingerPctAtEntry: entryGradeResult.valueScore,
   }).where(eq(positions.id, positionId));
 }
 
