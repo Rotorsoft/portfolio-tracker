@@ -1,6 +1,7 @@
 import { useState, useRef, memo } from "react";
 import { Plus, X, Trash2, Upload } from "lucide-react";
 import { trpc } from "../trpc.js";
+import { ActionButton } from "./ActionButton.js";
 import { DateInput } from "./DateInput.js";
 
 type AddFormsProps = {
@@ -35,8 +36,8 @@ export const AddTickersForm = memo(function AddTickersForm({ portfolioId, onDone
       <input type="text" name="tickers" placeholder="Ticker symbols (e.g. AAPL, MSFT, GOOG)" autoFocus autoComplete="off"
         className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" required />
       <div className="flex gap-2">
-        <button type="submit" disabled={adding} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">{adding ? "Adding..." : <><Plus size={12} /> Open</>}</button>
-        <button type="button" onClick={onDone} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><X size={12} /> Cancel</button>
+        <ActionButton type="submit" disabled={adding}>{adding ? "Adding..." : <><Plus size={12} /> Open</>}</ActionButton>
+        <ActionButton type="button" variant="secondary" onClick={onDone}><X size={12} /> Cancel</ActionButton>
       </div>
     </form>
   );
@@ -135,8 +136,8 @@ export const AddLotsForm = memo(function AddLotsForm({ portfolioId, onDone }: Ad
       <div className="flex items-center gap-3">
         <button type="button" onClick={() => setRowCount((c) => c + 1)} className="text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1"><Plus size={12} /> Add row</button>
         <div className="flex-1" />
-        <button type="submit" disabled={adding} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">{adding ? "Adding..." : <><Plus size={12} /> Submit Lots</>}</button>
-        <button type="button" onClick={onDone} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><X size={12} /> Cancel</button>
+        <ActionButton type="submit" disabled={adding}>{adding ? "Adding..." : <><Plus size={12} /> Submit Lots</>}</ActionButton>
+        <ActionButton type="button" variant="secondary" onClick={onDone}><X size={12} /> Cancel</ActionButton>
       </div>
     </form>
   );
@@ -248,7 +249,7 @@ export const AddSingleLotForm = memo(function AddSingleLotForm({ portfolioId, ti
             <input type="number" name="fees" placeholder="Fees (optional)" step="0.01" min="0" autoComplete="off" className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500" />
             <input type="text" name="notes" placeholder="Notes (optional)" autoComplete="off" className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500" />
           </div>
-          <button type="submit" disabled={adding} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">{adding ? "Adding..." : <><Plus size={12} /> Add Lot</>}</button>
+          <ActionButton type="submit" disabled={adding}>{adding ? "Adding..." : <><Plus size={12} /> Add Lot</>}</ActionButton>
         </form>
       ) : (
         <form onSubmit={handleBulkAdd} className="space-y-3">
@@ -256,7 +257,7 @@ export const AddSingleLotForm = memo(function AddSingleLotForm({ portfolioId, ti
             placeholder={"Paste lots, one per line:\nbuy, 2024-01-15, 100, 150.50, 4.99, Initial buy\nsell, 2024-06-01, 50, 180.00, 4.99, Took profits"}
             rows={6} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono" />
           <p className="text-xs text-gray-600">Format: type, date, quantity, price, fees, notes</p>
-          <button type="submit" disabled={adding} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1">{adding ? "Adding..." : <><Upload size={12} /> Add All Lots</>}</button>
+          <ActionButton type="submit" disabled={adding}>{adding ? "Adding..." : <><Upload size={12} /> Add All Lots</>}</ActionButton>
         </form>
       )}
     </div>
