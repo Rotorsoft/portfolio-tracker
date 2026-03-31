@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { trpc } from "../trpc.js";
+import { Modal } from "./Modal.js";
+import { FormInput } from "./FormInput.js";
+import { ActionButton } from "./ActionButton.js";
 
 type Props = {
   portfolioId: string;
@@ -34,52 +37,24 @@ export function PortfolioSettings({ portfolioId, name: initName, description: in
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 w-full max-w-md space-y-4" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-lg font-semibold text-white">Portfolio Settings</h3>
-
-        <div>
-          <label className="text-xs text-gray-500 block mb-1">Name</label>
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)}
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-        </div>
-
-        <div>
-          <label className="text-xs text-gray-500 block mb-1">Description</label>
-          <input type="text" value={description} onChange={(e) => setDescription(e.target.value)}
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-        </div>
-
+    <Modal open onClose={onClose} title="Portfolio Settings">
+      <div className="space-y-4">
+        <FormInput label="Name" type="text" value={name} onChange={(e) => setName(e.target.value)} />
+        <FormInput label="Description" type="text" value={description} onChange={(e) => setDescription(e.target.value)} />
         <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="text-xs text-gray-500 block mb-1">Currency</label>
-            <input type="text" value={currency} onChange={(e) => setCurrency(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 block mb-1">Cutoff Date</label>
-            <input type="date" value={cutoffDate} onChange={(e) => setCutoffDate(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-          </div>
+          <FormInput label="Currency" type="text" value={currency} onChange={(e) => setCurrency(e.target.value)} />
+          <FormInput label="Cutoff Date" type="date" value={cutoffDate} onChange={(e) => setCutoffDate(e.target.value)} />
         </div>
-
-        <div>
-          <label className="text-xs text-gray-500 block mb-1">Dip Threshold (%)</label>
-          <input type="number" min={0} max={50} step={1} value={dipThreshold} onChange={(e) => setDipThreshold(Number(e.target.value))}
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-          <p className="text-[10px] text-gray-600 mt-1">Price drop % below last buy to highlight avg-down opportunities</p>
-        </div>
-
+        <FormInput label="Dip Threshold (%)" type="number" min={0} max={50} step={1} value={dipThreshold}
+          onChange={(e) => setDipThreshold(Number(e.target.value))}
+          hint="Price drop % below last buy to highlight avg-down opportunities" />
         <div className="flex justify-end gap-2 pt-2">
-          <button onClick={onClose} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-4 py-2 rounded-lg text-sm font-medium">
-            Cancel
-          </button>
-          <button onClick={handleSave} disabled={saving || !name.trim()}
-            className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">
+          <ActionButton variant="secondary" onClick={onClose}>Cancel</ActionButton>
+          <ActionButton onClick={handleSave} disabled={saving || !name.trim()}>
             {saving ? "Saving..." : "Save"}
-          </button>
+          </ActionButton>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

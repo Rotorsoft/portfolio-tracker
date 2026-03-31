@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { ResponsiveContainer, ComposedChart, Line, Area, XAxis, YAxis, Tooltip, CartesianGrid, Legend, ReferenceLine } from "recharts";
 import { trpc } from "../trpc.js";
+import { StatCard } from "./StatCard.js";
 import { DateInput } from "./DateInput.js";
 import { fmtDate, fmtDateShort, fmtUsd, fmtUsdAbs } from "../fmt.js";
 
@@ -32,20 +33,15 @@ export function WhatIfChart({ portfolioId, cutoffDate, onSelectTicker }: { portf
           const advantage = actualGL - whatIfGL;
           return (
             <div className="flex items-start gap-5 text-right">
-              <div>
-                <div className="text-[10px] text-gray-600 uppercase">What-If Cost</div>
-                <div className="text-sm font-semibold text-white">{fmtUsd(totalWhatIf)}</div>
-              </div>
-              <div>
-                <div className="text-[10px] text-gray-600 uppercase">What-If G/L</div>
-                <div className={`text-sm font-semibold ${whatIfGL >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fmtUsdAbs(whatIfGL)}</div>
-                <div className={`text-[10px] ${whatIfGL >= 0 ? "text-emerald-400" : "text-red-400"}`}>{totalWhatIf > 0 ? Math.abs((whatIfGL / totalWhatIf) * 100).toFixed(2) : 0}%</div>
-              </div>
-              <div>
-                <div className="text-[10px] text-gray-600 uppercase">Your Timing</div>
-                <div className={`text-sm font-semibold ${advantage >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fmtUsdAbs(advantage)}</div>
-                <div className={`text-[10px] ${advantage >= 0 ? "text-emerald-400" : "text-red-400"}`}>{advantage >= 0 ? "better" : "worse"}</div>
-              </div>
+              <StatCard size="sm" label="What-If Cost" value={fmtUsd(totalWhatIf)} />
+              <StatCard size="sm" label="What-If G/L" value={fmtUsdAbs(whatIfGL)}
+                color={whatIfGL >= 0 ? "text-emerald-400" : "text-red-400"}
+                subValue={`${totalWhatIf > 0 ? Math.abs((whatIfGL / totalWhatIf) * 100).toFixed(2) : 0}%`}
+                subColor={whatIfGL >= 0 ? "text-emerald-400" : "text-red-400"} />
+              <StatCard size="sm" label="Your Timing" value={fmtUsdAbs(advantage)}
+                color={advantage >= 0 ? "text-emerald-400" : "text-red-400"}
+                subValue={advantage >= 0 ? "better" : "worse"}
+                subColor={advantage >= 0 ? "text-emerald-400" : "text-red-400"} />
             </div>
           );
         })()}

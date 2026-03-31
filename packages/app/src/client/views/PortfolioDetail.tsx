@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Plus, RefreshCw, Settings, LayoutList, BarChart3, Database, ExternalLink } from "lucide-react";
+import { ActionButton } from "../components/ActionButton.js";
+import { StatCard } from "../components/StatCard.js";
 import { BackButton } from "../components/BackButton.js";
 import { Tooltip } from "../components/Tooltip.js";
 import { trpc } from "../trpc.js";
@@ -230,24 +232,12 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
           const day = livePortfolioDayChange(summary.positions, liveQuotes, allTickerData ?? undefined);
           return (
           <div className="hidden md:flex items-start gap-6 text-center">
-            <div>
-              <div className="text-sm text-gray-600 uppercase">Cost</div>
-              <div className="text-lg font-semibold text-white">{fmtUsd(summary.totalCost)}</div>
-            </div>
-            <div>
-              <div className="text-sm text-gray-600 uppercase">Value</div>
-              <div className="text-lg font-semibold text-white">{fmtUsd(live.totalValue)}</div>
-            </div>
-            <div>
-              <div className="text-sm text-gray-600 uppercase">Gain/Loss</div>
-              <div className={`text-lg font-semibold ${glColor(live.gl)}`}>{fmtUsdAbs(live.gl)}</div>
-              <div className={`text-[10px] ${glColor(day.chg)}`}>{fmtUsdAbs(day.chg)} ({fmtPctAbs(day.pct)})</div>
-            </div>
-            <div>
-              <div className="text-sm text-gray-600 uppercase">Return</div>
-              <div className={`text-lg font-semibold ${glColor(live.glPct)}`}>{fmtPctAbs(live.glPct)}</div>
-              <div className={`text-[10px] ${glColor(day.chg)}`}>{fmtPctAbs(live.totalCost > 0 ? (day.chg / live.totalCost) * 100 : 0)}</div>
-            </div>
+            <StatCard label="Cost" value={fmtUsd(summary.totalCost)} />
+            <StatCard label="Value" value={fmtUsd(live.totalValue)} />
+            <StatCard label="Gain/Loss" value={fmtUsdAbs(live.gl)} color={glColor(live.gl)}
+              subValue={<>{fmtUsdAbs(day.chg)} ({fmtPctAbs(day.pct)})</>} subColor={glColor(day.chg)} />
+            <StatCard label="Return" value={fmtPctAbs(live.glPct)} color={glColor(live.glPct)}
+              subValue={fmtPctAbs(live.totalCost > 0 ? (day.chg / live.totalCost) * 100 : 0)} subColor={glColor(day.chg)} />
           </div>
           );
         })()}
@@ -416,8 +406,8 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
             )}
           </div>
           <div className="flex justify-end gap-2 mt-2">
-            <button onClick={() => setShowAdd("lots")} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><Plus size={12} /> Add Lots</button>
-            <button onClick={() => setShowAdd("positions")} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><Plus size={12} /> Add Tickers</button>
+            <ActionButton onClick={() => setShowAdd("lots")}><Plus size={12} /> Add Lots</ActionButton>
+            <ActionButton variant="secondary" onClick={() => setShowAdd("positions")}><Plus size={12} /> Add Tickers</ActionButton>
           </div>
           <Modal open={showAdd === "positions"} onClose={closeAdd} title="Add Tickers">
             <AddTickersForm portfolioId={portfolioId} onDone={closeAdd} />

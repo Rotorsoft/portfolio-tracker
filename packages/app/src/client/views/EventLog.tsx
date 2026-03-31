@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { EventEntry } from "../types.js";
 import { fmtDate } from "../fmt.js";
+import { FormInput } from "../components/FormInput.js";
 
 export function EventLog({ events }: { events: EventEntry[] }) {
   const [filter, setFilter] = useState("");
@@ -39,13 +40,9 @@ export function EventLog({ events }: { events: EventEntry[] }) {
         <span className="text-sm text-gray-500">{events.length} events</span>
       </div>
 
-      <input
-        type="text"
-        placeholder="Filter by event name or stream..."
-        value={filter}
-        onChange={(e) => setFilter(e.target.value)}
-        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-4"
-      />
+      <div className="mb-4">
+        <FormInput type="text" placeholder="Filter by event name or stream..." value={filter} onChange={(e) => setFilter(e.target.value)} />
+      </div>
 
       <div className="space-y-1">
         {sorted.slice(0, 200).map((e) => (

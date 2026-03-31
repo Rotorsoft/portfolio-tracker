@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Plus, X } from "lucide-react";
 import { trpc } from "../trpc.js";
 import { fmtDate } from "../fmt.js";
+import { FormInput } from "../components/FormInput.js";
+import { ActionButton } from "../components/ActionButton.js";
 
 export function PortfolioList({ onSelect }: { onSelect: (id: string) => void }) {
   const { data: portfolios, isLoading } = trpc.getPortfolios.useQuery();
@@ -32,40 +34,21 @@ export function PortfolioList({ onSelect }: { onSelect: (id: string) => void }) 
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold text-white">Portfolios</h2>
-        <button
-          onClick={() => setShowCreate(!showCreate)}
-          className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium transition-colors flex items-center gap-1"
-        >
+        <ActionButton onClick={() => setShowCreate(!showCreate)}>
           {showCreate ? <><X size={14} /> Cancel</> : <><Plus size={14} /> New Portfolio</>}
-        </button>
+        </ActionButton>
       </div>
 
       {showCreate && (
         <form onSubmit={handleCreate} className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-6 space-y-3">
-          <input
-            type="text"
-            placeholder="Portfolio name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            autoFocus
-            required
-          />
-          <input
-            type="text"
-            placeholder="Description (optional)"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
+          <FormInput type="text" placeholder="Portfolio name" value={name} onChange={(e) => setName(e.target.value)} autoFocus required />
+          <FormInput type="text" placeholder="Description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} />
           <div className="flex items-center gap-2">
             <label className="text-xs text-gray-500">Cutoff Date</label>
             <input type="date" value={cutoffDate} onChange={(e) => setCutoffDate(e.target.value)}
               className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white" />
           </div>
-          <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1">
-            <Plus size={14} /> Create
-          </button>
+          <ActionButton type="submit"><Plus size={14} /> Create</ActionButton>
         </form>
       )}
 
