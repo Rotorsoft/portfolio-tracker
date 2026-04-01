@@ -10,7 +10,7 @@ export function WhatIfChart({ portfolioId, cutoffDate, onSelectTicker }: { portf
   useEffect(() => { if (cutoffDate) setWhatIfDate(cutoffDate); }, [cutoffDate]);
   const [wiSort, setWiSort] = useState<{ col: string; dir: "asc" | "desc" }>({ col: "absDiff", dir: "desc" });
   const { data, isLoading } = trpc.getWhatIfComparison.useQuery(
-    { portfolioId, whatIfDate, from: whatIfDate && !isNaN(new Date(whatIfDate).getTime()) ? new Date(new Date(whatIfDate).getTime() - 7 * 86400000).toISOString().split("T")[0] : whatIfDate },
+    { portfolioId, whatIfDate },
     { enabled: !!whatIfDate && !isNaN(new Date(whatIfDate).getTime()) }
   );
 
@@ -33,12 +33,12 @@ export function WhatIfChart({ portfolioId, cutoffDate, onSelectTicker }: { portf
           const advantage = actualGL - whatIfGL;
           return (
             <div className="flex items-start gap-5 text-right">
-              <StatCard size="sm" label="What-If Cost" value={fmtUsd(totalWhatIf)} />
-              <StatCard size="sm" label="What-If G/L" value={fmtUsdAbs(whatIfGL)}
+              <StatCard label="What-If Cost" value={fmtUsd(totalWhatIf)} />
+              <StatCard label="What-If G/L" value={fmtUsdAbs(whatIfGL)}
                 color={whatIfGL >= 0 ? "text-emerald-400" : "text-red-400"}
                 subValue={`${totalWhatIf > 0 ? Math.abs((whatIfGL / totalWhatIf) * 100).toFixed(2) : 0}%`}
                 subColor={whatIfGL >= 0 ? "text-emerald-400" : "text-red-400"} />
-              <StatCard size="sm" label="Your Timing" value={fmtUsdAbs(advantage)}
+              <StatCard label="Your Timing" value={fmtUsdAbs(advantage)}
                 color={advantage >= 0 ? "text-emerald-400" : "text-red-400"}
                 subValue={advantage >= 0 ? "better" : "worse"}
                 subColor={advantage >= 0 ? "text-emerald-400" : "text-red-400"} />
@@ -52,7 +52,7 @@ export function WhatIfChart({ portfolioId, cutoffDate, onSelectTicker }: { portf
       {data && data.timeline.length > 0 && (() => {
         const lastEntry = data.timeline.at(-1);
         const whatIfGLNeg = (lastEntry?.whatIfGL ?? 0) < 0;
-        const timingColor = ((lastEntry?.actualGL ?? 0) - (lastEntry?.whatIfGL ?? 0)) >= 0 ? "#10b981" : "#ef4444";
+        const timingColor = "#f59e0b"; // amber/yellow for timing delta — distinct from green/red value lines
         // Add timing delta to timeline data
         const chartData = data.timeline.map((d) => ({
           ...d,
@@ -101,8 +101,8 @@ export function WhatIfChart({ portfolioId, cutoffDate, onSelectTicker }: { portf
               {cutoffDate && cutoffDate !== whatIfDate && <ReferenceLine yAxisId="value" x={cutoffDate} stroke="#f59e0b" strokeDasharray="3 3" strokeOpacity={0.5} label={{ value: "Cutoff", fill: "#f59e0b", fontSize: 9, position: "insideTopLeft" }} />}
               <Area yAxisId="delta" type="monotone" dataKey="timingDelta" fill="url(#timingGrad)" stroke={timingColor} strokeWidth={1} dot={false} />
               <Line yAxisId="value" type="monotone" dataKey="actualCost" stroke="#64748b" strokeWidth={1} strokeDasharray="4 4" dot={false} />
-              <Line yAxisId="value" type="monotone" dataKey="actualValue" stroke="#6366f1" strokeWidth={2} dot={false} />
               <Line yAxisId="value" type="monotone" dataKey="whatIfValue" stroke={whatIfGLNeg ? "#ef4444" : "#10b981"} strokeWidth={2} dot={false} />
+              <Line yAxisId="value" type="monotone" dataKey="actualValue" stroke="#6366f1" strokeWidth={2.5} dot={false} />
             </ComposedChart>
           </ResponsiveContainer>
         );
@@ -122,13 +122,13 @@ export function WhatIfChart({ portfolioId, cutoffDate, onSelectTicker }: { portf
                   { key: "actualShares", label: "Shares", align: "right" },
                   { key: "avgCost", label: "Avg Cost", align: "right" },
                   { key: "actualCost", label: "Total Cost", align: "right" },
-                  { key: "avgWhatIf", label: "What-If Avg", align: "right" },
+                  { key: "avgWhatIf", label: "What-If Avg", align: "right", border: true },
                   { key: "whatIfCost", label: "What-If Total", align: "right" },
-                  { key: "diff", label: "Difference", align: "right" },
+                  { key: "diff", label: "Difference", align: "right", border: true },
                   { key: "diffPct", label: "Diff %", align: "right" },
                 ] as const).map((col) => (
                   <th key={col.key} onClick={() => setWiSort((s) => ({ col: col.key, dir: s.col === col.key && s.dir === "asc" ? "desc" : "asc" }))}
-                    className={`text-${col.align} px-3 py-2 text-xs text-gray-500 uppercase cursor-pointer hover:text-gray-300 select-none whitespace-nowrap`}>
+                    className={`text-${col.align} px-3 py-2 text-xs text-gray-500 uppercase cursor-pointer hover:text-gray-300 select-none whitespace-nowrap ${(col as any).border ? "border-l border-gray-800" : ""}`}>
                     {col.label}{wiSort.col === col.key ? (wiSort.dir === "asc" ? " ▲" : " ▼") : ""}
                   </th>
                 ))}
@@ -149,9 +149,9 @@ export function WhatIfChart({ portfolioId, cutoffDate, onSelectTicker }: { portf
                   <td className="px-3 py-2 text-right text-gray-300">{p.actualShares}</td>
                   <td className="px-3 py-2 text-right text-gray-300">{fmtUsd(p.avgCost)}</td>
                   <td className="px-3 py-2 text-right text-gray-300">{fmtUsd(p.actualCost)}</td>
-                  <td className={`px-3 py-2 text-right ${p.avgWhatIf > p.avgCost ? "text-red-400" : p.avgWhatIf < p.avgCost ? "text-emerald-400" : "text-gray-300"}`}>{fmtUsd(p.avgWhatIf)}</td>
+                  <td className={`px-3 py-2 text-right border-l border-gray-800 ${p.avgWhatIf > p.avgCost ? "text-red-400" : p.avgWhatIf < p.avgCost ? "text-emerald-400" : "text-gray-300"}`}>{fmtUsd(p.avgWhatIf)}</td>
                   <td className={`px-3 py-2 text-right ${p.whatIfCost > p.actualCost ? "text-red-400" : p.whatIfCost < p.actualCost ? "text-emerald-400" : "text-gray-300"}`}>{fmtUsd(p.whatIfCost)}</td>
-                  <td className={`px-3 py-2 text-right font-medium ${p.diff > 0 ? "text-red-400" : p.diff < 0 ? "text-emerald-400" : "text-gray-400"}`}>
+                  <td className={`px-3 py-2 text-right font-medium border-l border-gray-800 ${p.diff > 0 ? "text-red-400" : p.diff < 0 ? "text-emerald-400" : "text-gray-400"}`}>
                     {fmtUsdAbs(p.diff)}
                   </td>
                   <td className={`px-3 py-2 text-right font-medium ${p.diffPct > 0 ? "text-red-400" : p.diffPct < 0 ? "text-emerald-400" : "text-gray-400"}`}>
@@ -167,15 +167,15 @@ export function WhatIfChart({ portfolioId, cutoffDate, onSelectTicker }: { portf
                 const totalDiff = totalActual - totalWI;
                 const totalDiffPct = totalWI > 0 ? (totalDiff / totalWI) * 100 : 0;
                 return (
-                  <tr className="border-t border-gray-700">
-                    <td className="px-3 py-2 text-white font-medium">Total</td>
-                    <td className="px-3 py-2 text-right text-gray-300" />
-                    <td className="px-3 py-2 text-right text-gray-300" />
-                    <td className="px-3 py-2 text-right text-white font-medium">{fmtUsd(totalActual)}</td>
-                    <td className="px-3 py-2 text-right text-gray-300" />
-                    <td className="px-3 py-2 text-right text-white font-medium">{fmtUsd(totalWI)}</td>
-                    <td className={`px-3 py-2 text-right font-bold ${totalDiff > 0 ? "text-red-400" : totalDiff < 0 ? "text-emerald-400" : "text-gray-400"}`}>{fmtUsdAbs(totalDiff)}</td>
-                    <td className={`px-3 py-2 text-right font-bold ${totalDiffPct > 0 ? "text-red-400" : totalDiffPct < 0 ? "text-emerald-400" : "text-gray-400"}`}>{Math.abs(totalDiffPct).toFixed(1)}%</td>
+                  <tr className="border-t border-gray-700 text-sm">
+                    <td className="px-3 py-3 text-white font-semibold">Total</td>
+                    <td className="px-3 py-3" />
+                    <td className="px-3 py-3" />
+                    <td className="px-3 py-3 text-right text-white font-semibold">{fmtUsd(totalActual)}</td>
+                    <td className="px-3 py-3 border-l border-gray-800" />
+                    <td className="px-3 py-3 text-right text-white font-semibold">{fmtUsd(totalWI)}</td>
+                    <td className={`px-3 py-3 text-right font-bold border-l border-gray-800 ${totalDiff > 0 ? "text-red-400" : totalDiff < 0 ? "text-emerald-400" : "text-gray-400"}`}>{fmtUsdAbs(totalDiff)}</td>
+                    <td className={`px-3 py-3 text-right font-bold ${totalDiffPct > 0 ? "text-red-400" : totalDiffPct < 0 ? "text-emerald-400" : "text-gray-400"}`}>{Math.abs(totalDiffPct).toFixed(1)}%</td>
                   </tr>
                 );
               })()}

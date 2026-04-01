@@ -447,7 +447,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
               </button>
             ))}
           </div>
-          {analysisMode === "benchmark" && <BenchmarkChart portfolioId={portfolioId} />}
+          {analysisMode === "benchmark" && <BenchmarkChart portfolioId={portfolioId} onSelectTicker={(ticker) => nav.toPosition(portfolioId, ticker)} />}
           {analysisMode === "whatif" && <WhatIfChart portfolioId={portfolioId} cutoffDate={cutoffDate} onSelectTicker={(ticker) => nav.toPosition(portfolioId, ticker)} />}
         </div>
       )}

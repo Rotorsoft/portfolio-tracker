@@ -1,11 +1,14 @@
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid, ReferenceLine, Cell } from "recharts";
+import { useState } from "react";
 import { trpc } from "../trpc.js";
 import { fmtUsd, fmtUsdAbs, fmtPctAbs, glColor } from "../fmt.js";
 import { StatCard } from "./StatCard.js";
 import { Tooltip } from "./Tooltip.js";
 
-export function BenchmarkChart({ portfolioId }: { portfolioId: string }) {
+type Props = { portfolioId: string; onSelectTicker?: (ticker: string) => void };
+
+export function BenchmarkChart({ portfolioId, onSelectTicker }: Props) {
   const { data: summary } = trpc.getPortfolioSummary.useQuery({ portfolioId });
+  const [sort, setSort] = useState<{ col: string; dir: "asc" | "desc" }>({ col: "alphaPct", dir: "desc" });
 
   if (!summary || summary.positions.length === 0) {
     return <div className="text-gray-500 text-center py-8">No positions to analyze.</div>;
@@ -15,17 +18,27 @@ export function BenchmarkChart({ portfolioId }: { portfolioId: string }) {
   const actualReturnPct = totalCost > 0 ? ((totalMarketValue - totalCost) / totalCost) * 100 : 0;
   const actualGL = totalMarketValue - totalCost;
   const benchmarkGL = (totalBenchmarkValue ?? 0) - totalCost;
+  const maxAlpha = Math.max(...summary.positions.map((p) => Math.abs(p.alphaPct ?? 0)), 1);
 
-  const sorted = [...summary.positions].sort((a, b) => (b.alphaPct ?? 0) - (a.alphaPct ?? 0));
-  const maxAlpha = Math.max(...sorted.map((p) => Math.abs(p.alphaPct ?? 0)), 1);
+  const cols: { key: string; label: string; align: string; border?: boolean }[] = [
+    { key: "ticker", label: "Ticker", align: "left" },
+    { key: "cost", label: "Cost", align: "right" },
+    { key: "marketValue", label: "Your Value", align: "right" },
+    { key: "actualReturnPct", label: "Your Return", align: "right" },
+    { key: "benchmarkValue", label: "VOO Value", align: "right", border: true },
+    { key: "benchmarkReturnPct", label: "VOO Return", align: "right" },
+    { key: "alphaPct", label: "Alpha", align: "right", border: true },
+  ];
 
-  // Chart data
-  const chartData = sorted.map((p) => ({
-    ticker: p.ticker,
-    alpha: Math.round((p.alphaPct ?? 0) * 100) / 100,
-    actual: Math.round((p.actualReturnPct ?? 0) * 100) / 100,
-    benchmark: Math.round((p.benchmarkReturnPct ?? 0) * 100) / 100,
-  }));
+  const rows = [...summary.positions].map((p) => ({
+    ...p,
+    cost: p.totalShares * p.avgCostBasis,
+  })).sort((a, b) => {
+    const av = (a as any)[sort.col] ?? 0;
+    const bv = (b as any)[sort.col] ?? 0;
+    const cmp = typeof av === "string" ? av.localeCompare(bv) : av - bv;
+    return sort.dir === "asc" ? cmp : -cmp;
+  });
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
@@ -35,78 +48,55 @@ export function BenchmarkChart({ portfolioId }: { portfolioId: string }) {
           <p className="text-[10px] text-gray-600 mt-0.5">Compares your actual returns against investing the same $ on the same dates into VOO</p>
         </div>
         <div className="flex items-start gap-5 text-right">
-          <StatCard size="sm" label="Your Return" value={fmtPctAbs(actualReturnPct)} color={glColor(actualGL)}
+          <StatCard label="Your Return" value={fmtPctAbs(actualReturnPct)} color={glColor(actualGL)}
             subValue={fmtUsdAbs(actualGL)} subColor={glColor(actualGL)} />
-          <StatCard size="sm" label="S&P 500" value={fmtPctAbs(portfolioBenchmarkReturnPct ?? 0)} color={glColor(benchmarkGL)}
+          <StatCard label="S&P 500" value={fmtPctAbs(portfolioBenchmarkReturnPct ?? 0)} color={glColor(benchmarkGL)}
             subValue={fmtUsdAbs(benchmarkGL)} subColor={glColor(benchmarkGL)} />
-          <StatCard size="sm" label="Alpha" value={`${(portfolioAlphaPct ?? 0) >= 0 ? "+" : ""}${fmtPctAbs(portfolioAlphaPct ?? 0)}`}
+          <StatCard label="Alpha" value={`${(portfolioAlphaPct ?? 0) >= 0 ? "+" : ""}${fmtPctAbs(portfolioAlphaPct ?? 0)}`}
             color={(portfolioAlphaPct ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"}
             subValue={(portfolioAlphaPct ?? 0) >= 0 ? "outperforming" : "underperforming"}
             subColor={(portfolioAlphaPct ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"} />
         </div>
       </div>
 
-      {/* Alpha bar chart */}
-      <ResponsiveContainer width="100%" height={Math.max(200, sorted.length * 32 + 40)}>
-        <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 20, bottom: 0, left: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
-          <XAxis type="number" tick={{ fontSize: 11, fill: "#64748b" }} tickFormatter={(v: number) => `${v}%`} />
-          <YAxis type="category" dataKey="ticker" tick={{ fontSize: 11, fill: "#e2e8f0", fontWeight: 500 }} width={50} />
-          <ReferenceLine x={0} stroke="#475569" />
-          <RechartsTooltip
-            contentStyle={{ backgroundColor: "#1e293b", border: "1px solid #334155", borderRadius: "8px", fontSize: "12px" }}
-            formatter={(value: number, name: string) => [
-              `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`,
-              name === "alpha" ? "Alpha" : name === "actual" ? "Your Return" : "S&P 500",
-            ]}
-          />
-          <Bar dataKey="alpha" radius={[0, 4, 4, 0]}>
-            {chartData.map((d, i) => (
-              <Cell key={i} fill={d.alpha >= 0 ? "#10b981" : "#ef4444"} fillOpacity={0.7} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-
-      {/* Per-position table */}
-      <div className="overflow-x-auto mt-4">
+      <div className="overflow-x-auto rounded-lg border border-gray-700">
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-gray-700 bg-gray-800/50">
-              <th className="text-left px-3 py-2 text-gray-500 uppercase">Ticker</th>
-              <th className="text-right px-3 py-2 text-gray-500 uppercase">Cost</th>
-              <th className="text-right px-3 py-2 text-gray-500 uppercase">Your Value</th>
-              <th className="text-right px-3 py-2 text-gray-500 uppercase">Your Return</th>
-              <th className="text-right px-3 py-2 text-gray-500 uppercase border-l border-gray-800">VOO Value</th>
-              <th className="text-right px-3 py-2 text-gray-500 uppercase">VOO Return</th>
-              <th className="text-right px-3 py-2 text-gray-500 uppercase border-l border-gray-800">
-                <Tooltip label="Alpha = your return % minus what S&P 500 would have returned on the same investment dates and amounts">Alpha</Tooltip>
-              </th>
+              {cols.map((col) => (
+                <th key={col.key} onClick={() => setSort((s) => ({ col: col.key, dir: s.col === col.key && s.dir === "asc" ? "desc" : "asc" }))}
+                  className={`text-${col.align} px-3 py-2 text-xs text-gray-500 uppercase cursor-pointer hover:text-gray-300 select-none whitespace-nowrap ${col.border ? "border-l border-gray-800" : ""}`}>
+                  {col.key === "alphaPct" ? <Tooltip label="Alpha = your return % minus what S&P 500 would have returned on the same dates and amounts">{col.label}</Tooltip> : col.label}
+                  {sort.col === col.key ? (sort.dir === "asc" ? " ▲" : " ▼") : ""}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {sorted.map((pos) => {
-              const posGL = pos.marketValue - (pos.totalShares * pos.avgCostBasis);
+            {rows.map((pos) => {
+              const posGL = pos.marketValue - pos.cost;
               const posBenchGL = (pos.benchmarkValue ?? 0) - (pos.benchmarkCost ?? 0);
               const alpha = pos.alphaPct ?? 0;
               return (
-                <tr key={pos.ticker} className="border-b border-gray-800/50">
+                <tr key={pos.ticker} onClick={() => onSelectTicker?.(pos.ticker)}
+                  className={`border-b border-gray-800/50 ${onSelectTicker ? "cursor-pointer hover:bg-gray-800/30" : ""}`}>
                   <td className="px-3 py-2 text-white font-medium">{pos.ticker}</td>
-                  <td className="px-3 py-2 text-right text-gray-300">{fmtUsd(pos.totalShares * pos.avgCostBasis)}</td>
+                  <td className="px-3 py-2 text-right text-gray-300">{fmtUsd(pos.cost)}</td>
                   <td className="px-3 py-2 text-right text-gray-300">{fmtUsd(pos.marketValue)}</td>
                   <td className={`px-3 py-2 text-right font-medium ${glColor(posGL)}`}>{fmtPctAbs(pos.actualReturnPct ?? 0)}</td>
-                  <td className={`px-3 py-2 text-right text-gray-300 border-l border-gray-800`}>{fmtUsd(pos.benchmarkValue ?? 0)}</td>
+                  <td className="px-3 py-2 text-right text-gray-300 border-l border-gray-800">{fmtUsd(pos.benchmarkValue ?? 0)}</td>
                   <td className={`px-3 py-2 text-right font-medium ${glColor(posBenchGL)}`}>{fmtPctAbs(pos.benchmarkReturnPct ?? 0)}</td>
                   <td className="px-3 py-2 border-l border-gray-800">
                     <div className="flex items-center justify-end gap-2">
-                      <div className="w-16 h-1.5 bg-gray-800 rounded-full overflow-hidden flex">
+                      <div className="w-24 h-2 bg-gray-800 rounded-full relative overflow-hidden">
+                        <div className="absolute top-0 bottom-0 left-1/2 w-px bg-gray-600" />
                         {alpha >= 0 ? (
-                          <div className="h-full bg-emerald-500 rounded-full ml-auto" style={{ width: `${Math.min(100, (alpha / maxAlpha) * 100)}%` }} />
+                          <div className="absolute top-0 bottom-0 left-1/2 bg-emerald-500 rounded-r-full" style={{ width: `${Math.min(50, (alpha / maxAlpha) * 50)}%` }} />
                         ) : (
-                          <div className="h-full bg-red-500 rounded-full" style={{ width: `${Math.min(100, (Math.abs(alpha) / maxAlpha) * 100)}%` }} />
+                          <div className="absolute top-0 bottom-0 bg-red-500 rounded-l-full" style={{ width: `${Math.min(50, (Math.abs(alpha) / maxAlpha) * 50)}%`, right: "50%" }} />
                         )}
                       </div>
-                      <span className={`font-bold tabular-nums ${alpha >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                      <span className={`font-bold tabular-nums min-w-[50px] text-left ${alpha >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                         {alpha >= 0 ? "+" : ""}{fmtPctAbs(alpha)}
                       </span>
                     </div>
@@ -116,14 +106,14 @@ export function BenchmarkChart({ portfolioId }: { portfolioId: string }) {
             })}
           </tbody>
           <tfoot>
-            <tr className="border-t border-gray-700">
-              <td className="px-3 py-2 text-white font-medium">Total</td>
-              <td className="px-3 py-2 text-right text-white font-medium">{fmtUsd(totalCost)}</td>
-              <td className="px-3 py-2 text-right text-white font-medium">{fmtUsd(totalMarketValue)}</td>
-              <td className={`px-3 py-2 text-right font-bold ${glColor(actualGL)}`}>{fmtPctAbs(actualReturnPct)}</td>
-              <td className={`px-3 py-2 text-right text-white font-medium border-l border-gray-800`}>{fmtUsd(totalBenchmarkValue ?? 0)}</td>
-              <td className={`px-3 py-2 text-right font-bold ${glColor(benchmarkGL)}`}>{fmtPctAbs(portfolioBenchmarkReturnPct ?? 0)}</td>
-              <td className={`px-3 py-2 text-right font-bold border-l border-gray-800 ${(portfolioAlphaPct ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+            <tr className="border-t border-gray-700 text-sm">
+              <td className="px-3 py-3 text-white font-semibold">Total</td>
+              <td className="px-3 py-3 text-right text-white font-semibold">{fmtUsd(totalCost)}</td>
+              <td className="px-3 py-3 text-right text-white font-semibold">{fmtUsd(totalMarketValue)}</td>
+              <td className={`px-3 py-3 text-right font-bold ${glColor(actualGL)}`}>{fmtPctAbs(actualReturnPct)}</td>
+              <td className="px-3 py-3 text-right text-white font-semibold border-l border-gray-800">{fmtUsd(totalBenchmarkValue ?? 0)}</td>
+              <td className={`px-3 py-3 text-right font-bold ${glColor(benchmarkGL)}`}>{fmtPctAbs(portfolioBenchmarkReturnPct ?? 0)}</td>
+              <td className={`px-3 py-3 text-right font-bold border-l border-gray-800 ${(portfolioAlphaPct ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                 {(portfolioAlphaPct ?? 0) >= 0 ? "+" : ""}{fmtPctAbs(portfolioAlphaPct ?? 0)}
               </td>
             </tr>

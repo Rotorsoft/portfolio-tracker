@@ -228,6 +228,8 @@ export const domainRouter = t.router({
     .input(z.object({ portfolioId: z.string() }))
     .query(async ({ input }) => {
       const positions = await getPositionsByPortfolio(input.portfolioId);
+      const allTickers = await getTickers();
+      const tickerMap = new Map(allTickers.map((t) => [t.symbol, t]));
       let totalCost = 0;
       let totalMarketValue = 0;
       const tickerSummaries: Array<{
@@ -242,7 +244,7 @@ export const domainRouter = t.router({
 
       for (const pos of positions) {
         if (pos.status !== "open") continue;
-        const tickerInfo = await getTicker(pos.ticker);
+        const tickerInfo = tickerMap.get(pos.ticker);
         const currentPrice = tickerInfo?.lastClose ?? 0;
         const marketValue = (pos.totalShares ?? 0) * currentPrice;
         const cost = pos.totalCost ?? 0;
@@ -402,10 +404,23 @@ export const domainRouter = t.router({
 
       if (positionInfo.length === 0) return { positions: positionInfo, timeline: [] };
 
-      const totalActualCost = positionInfo.reduce((s, p) => s + p.actualCost, 0);
       const totalWhatIfCost = positionInfo.reduce((s, p) => s + p.whatIfCost, 0);
 
-      // Build daily timeline comparing actual vs what-if
+      // Build daily timeline — batch-fetch all prices to avoid N*M queries
+      const openPositions = positions.filter((p) => p.status === "open");
+      const tickers = openPositions.map((p) => p.ticker);
+      const allPricesMap: Record<string, Record<string, number>> = {};
+      for (const t of tickers) {
+        const prices = await getTickerPrices(t, from, to);
+        allPricesMap[t] = {};
+        for (const p of prices) allPricesMap[t][p.date] = p.close;
+      }
+
+      // Collect all trading dates
+      const tradingDates = new Set<string>();
+      for (const t of tickers) for (const d of Object.keys(allPricesMap[t])) tradingDates.add(d);
+      const sortedDates = [...tradingDates].sort();
+
       const timeline: Array<{
         date: string;
         actualCost: number;
@@ -416,56 +431,47 @@ export const domainRouter = t.router({
         whatIfGL: number;
       }> = [];
 
-      const current = new Date(from);
-      const end = new Date(to);
-      while (current <= end) {
-        const day = current.getDay();
-        if (day !== 0 && day !== 6) {
-          const dateStr = current.toISOString().split("T")[0];
-          let actualCostAtDate = 0;
-          let actualValue = 0;
-          let whatIfValue = 0;
+      // Track last known price per ticker for days with gaps
+      const lastPrice: Record<string, number> = {};
 
-          for (const pos of positions) {
-            if (pos.status !== "open") continue;
-            // Actual: shares held at this date based on lot transaction dates
-            let sharesAtDate = 0;
-            let costAtDate = 0;
-            for (const lot of pos.lots ?? []) {
-              if (lot.transactionDate <= dateStr) {
-                if (lot.type === "buy") { sharesAtDate += lot.quantity; costAtDate += lot.quantity * lot.price + lot.fees; }
-                else { sharesAtDate -= lot.quantity; costAtDate -= lot.quantity * lot.price - lot.fees; }
-              }
-            }
+      for (const dateStr of sortedDates) {
+        let actualCostAtDate = 0;
+        let actualValue = 0;
+        let whatIfValue = 0;
 
-            const price = await getPriceOnDate(pos.ticker, dateStr);
-            const closePrice = price?.close ?? 0;
+        for (const pos of openPositions) {
+          const closePrice = allPricesMap[pos.ticker]?.[dateStr] ?? lastPrice[pos.ticker] ?? 0;
+          if (allPricesMap[pos.ticker]?.[dateStr]) lastPrice[pos.ticker] = closePrice;
 
-            if (sharesAtDate > 0) {
-              actualCostAtDate += costAtDate;
-              actualValue += sharesAtDate * closePrice;
-            }
-
-            // What-if: all final shares bought on whatIfDate
-            const info = positionInfo.find((p) => p.ticker === pos.ticker);
-            if (info && dateStr >= input.whatIfDate) {
-              whatIfValue += info.actualShares * closePrice;
+          let sharesAtDate = 0;
+          let costAtDate = 0;
+          for (const lot of pos.lots ?? []) {
+            if (lot.transactionDate <= dateStr) {
+              if (lot.type === "buy") { sharesAtDate += lot.quantity; costAtDate += lot.quantity * lot.price + lot.fees; }
+              else { sharesAtDate -= lot.quantity; costAtDate -= lot.quantity * lot.price - lot.fees; }
             }
           }
 
-          {
-            timeline.push({
-              date: dateStr,
-              actualCost: actualCostAtDate,
-              actualValue,
-              actualGL: actualValue - actualCostAtDate,
-              whatIfCost: dateStr >= input.whatIfDate ? totalWhatIfCost : 0,
-              whatIfValue,
-              whatIfGL: dateStr >= input.whatIfDate ? whatIfValue - totalWhatIfCost : 0,
-            });
+          if (sharesAtDate > 0) {
+            actualCostAtDate += costAtDate;
+            actualValue += sharesAtDate * closePrice;
+          }
+
+          const info = positionInfo.find((p) => p.ticker === pos.ticker);
+          if (info && dateStr >= input.whatIfDate) {
+            whatIfValue += info.actualShares * closePrice;
           }
         }
-        current.setDate(current.getDate() + 1);
+
+        timeline.push({
+          date: dateStr,
+          actualCost: actualCostAtDate,
+          actualValue,
+          actualGL: actualValue - actualCostAtDate,
+          whatIfCost: dateStr >= input.whatIfDate ? totalWhatIfCost : 0,
+          whatIfValue,
+          whatIfGL: dateStr >= input.whatIfDate ? whatIfValue - totalWhatIfCost : 0,
+        });
       }
 
       return { positions: positionInfo, timeline };

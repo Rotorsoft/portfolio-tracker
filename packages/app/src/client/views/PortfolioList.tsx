@@ -84,9 +84,7 @@ function PortfolioCard({ portfolio: p, onSelect }: { portfolio: any; onSelect: (
           <h3 className="font-semibold text-white group-hover:text-indigo-400 transition-colors">
             {p.name}
           </h3>
-          {p.description && (
-            <p className="text-sm text-gray-500 mt-1">{p.description}</p>
-          )}
+          <p className="text-sm text-gray-500 mt-1">{p.description || "\u00A0"}</p>
         </div>
         <span className={`text-xs px-2 py-0.5 rounded-full ${
           p.status === "active"
