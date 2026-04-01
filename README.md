@@ -2,6 +2,25 @@
 
 An event-sourced portfolio tracker with live quotes, technical analysis signals, entry grading, and what-if scenario modeling. Built with [@rotorsoft/act](https://github.com/Rotorsoft/act) for event sourcing, tRPC for end-to-end type safety, and React for the frontend.
 
+## Quick Start
+
+```bash
+git clone https://github.com/Rotorsoft/portfolio-tracker.git
+cd portfolio-tracker
+pnpm install
+
+# Start PostgreSQL (Docker)
+docker compose up -d
+
+# Run migrations
+pnpm -F @rotorsoft/portfolio-tracker-domain drizzle:migrate
+
+# Start dev server (API on :4000, UI on :5173)
+pnpm dev
+```
+
+Open http://localhost:5173, create an account, and start adding portfolios.
+
 ## Architecture
 
 ```
@@ -27,13 +46,16 @@ portfolio-tracker/
 
 ### Portfolio Management
 - Multiple portfolios with configurable currency and cutoff dates
-- Buy/sell lot tracking with fees and notes
-- Bulk lot import and position management
+- Portfolio cards with total value, G/L, alpha badge, and position count
+- Buy/sell lot tracking with fees and notes via modal forms
+- Bulk lot import (single or CSV) and position management
+- Backfill any ticker (including benchmarks like VOO) from the Price Data tab
 
 ### Live Market Data
 - Real-time quotes polling every 5 minutes (configurable)
 - Auto-backfill daily prices on server start when behind
-- Market open/closed indicator with countdown timer
+- Market open/closed indicator with live countdown timer (second precision)
+- Major index marquee (DOW, S&P 500, NASDAQ) with live/closed status
 - Daily portfolio value delta in summary bar
 
 ### Technical Analysis
@@ -44,26 +66,26 @@ portfolio-tracker/
   - **Timing (30%)** -- RSI pullback zone (30-50 ideal) and position within recent range
 - **Chart Overlays** -- MA50, MA200, Bollinger Bands with range presets (1M/3M/6M/1Y/ALL)
 - **Intraday Alerts** -- detects live price crossing MA50/MA200 or big daily moves (3%+)
-- **Major Index Marquee** -- DOW, S&P 500, NASDAQ scrolling ticker with live/closed indicator
 
 ### Position Analytics
-- Timing score (where your entry sits in the price range)
-- DCA comparison (your actual cost vs. dollar-cost averaging)
-- Max drawdown and days underwater
 - 52-week range bar with avg cost tick and color-coded current price
-- Lot-chart interaction (hover lot row to highlight on price chart)
+- Lot-chart interaction (hover lot row to highlight on price chart with tooltip)
+- Max drawdown and days underwater
+- Entry grade tooltip with per-factor breakdown (Trend/Value/Timing)
 - Entry vs MA50 at time of purchase
+
+### Performance Tab
+Three analysis modes for evaluating portfolio performance:
+
+- **Attribution** -- alpha vs S&P 500 (VOO) benchmark. Compares actual returns against investing the same dollars on the same dates into VOO. Per-position alpha with diverging bar chart, portfolio-level alpha, cost weights. Cached in DB, recomputed on lot changes.
+- **DCA** -- dollar-cost averaging comparison. Timeline chart and per-position table showing your actual value vs hypothetical DCA value (spreading purchases evenly across trading days). Single-lot positions correctly mirror actual.
+- **Scenario** -- what-if single-date analysis. Timeline chart comparing actual portfolio against buying everything on a chosen date. Per-ticker cost breakdown with savings/overpayment.
 
 ### Avg-Down Opportunities
 - Highlights when live price drops below your last buy price
 - Configurable dip threshold per portfolio (default 5%)
 - Hover tooltip shows 3 scenarios (buy 25%, 50%, or 100% more shares)
 - Color intensity reflects opportunity quality (bigger dip = greener)
-
-### What-If Analysis
-- Compare actual portfolio performance against buying everything on a single date
-- Timeline chart showing actual vs hypothetical portfolio value
-- Per-ticker cost comparison with savings/overpayment breakdown
 
 ## Tech Stack
 
@@ -208,10 +230,11 @@ All indicator functions are pure (no side effects) and tested independently:
 - `requestBackfill` -- fetch prices from Yahoo Finance
 
 ### Analytics
-- `getPortfolioSummary` -- totals + per-position metrics
-- `getEntryAnalysis` -- timing, DCA comparison, per-lot grades
+- `getPortfolioSummary` -- totals + per-position metrics + alpha vs S&P 500
+- `getEntryAnalysis` -- timing, DCA comparison, per-lot grades with factor breakdown
 - `getChartOverlays` -- MA and Bollinger series for charts
-- `getWhatIfComparison` -- hypothetical scenario modeling
+- `getWhatIfComparison` -- hypothetical scenario modeling (batch-optimized)
+- `getDCAComparison` -- DCA timeline and per-position value comparison
 - `getTickerPerformance` -- price history relative to entry
 
 ### Real-time
