@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Plus, X } from "lucide-react";
 import { trpc } from "../trpc.js";
-import { fmtDate, fmtUsd, fmtUsdAbs, fmtPctAbs, glColor } from "../fmt.js";
+import { fmtUsd, fmtUsdAbs, fmtPctAbs, glColor } from "../fmt.js";
 import { FormInput } from "../components/FormInput.js";
 import { ActionButton } from "../components/ActionButton.js";
 
@@ -86,13 +86,14 @@ function PortfolioCard({ portfolio: p, onSelect }: { portfolio: any; onSelect: (
           </h3>
           <p className="text-sm text-gray-500 mt-1">{p.description || "\u00A0"}</p>
         </div>
-        <span className={`text-xs px-2 py-0.5 rounded-full ${
-          p.status === "active"
-            ? "bg-emerald-500/10 text-emerald-400"
-            : "bg-gray-700 text-gray-400"
-        }`}>
-          {p.status}
-        </span>
+        {summary && posCount > 0 && (() => {
+          const alpha = summary.portfolioAlphaPct ?? 0;
+          return (
+            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${alpha >= 0 ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"}`}>
+              {alpha >= 0 ? "+" : ""}{fmtPctAbs(alpha)} α
+            </span>
+          );
+        })()}
       </div>
       {summary && posCount > 0 && (
         <div className="mt-3 flex items-baseline gap-4">
@@ -100,14 +101,9 @@ function PortfolioCard({ portfolio: p, onSelect }: { portfolio: any; onSelect: (
           <span className={`text-xs font-medium ${glColor(gl)}`}>
             {gl >= 0 ? "+" : ""}{fmtUsdAbs(gl)} ({fmtPctAbs(glPct)})
           </span>
-          <span className="text-xs text-gray-600">{posCount} position{posCount !== 1 ? "s" : ""}</span>
+          <span className="text-xs text-gray-600 ml-auto">{posCount} position{posCount !== 1 ? "s" : ""}</span>
         </div>
       )}
-      <div className="mt-2 text-xs text-gray-600">
-        {p.currency}
-        {p.cutoffDate && <> &middot; Since {fmtDate(p.cutoffDate)}</>}
-        {" "}&middot; Created {fmtDate(p.createdAt?.split("T")[0] ?? "")}
-      </div>
     </button>
   );
 }

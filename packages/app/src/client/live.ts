@@ -232,16 +232,17 @@ export function fmtCountdown(ms: number): string {
 /** Time until market close (4pm ET), or time until market open (9:30am ET) */
 export function marketCountdown(): { label: string; ms: number } {
   const now = new Date();
-  const etStr = now.toLocaleString("en-US", { timeZone: "America/New_York", hour12: false, hour: "2-digit", minute: "2-digit" });
-  const [h, m] = etStr.split(":").map(Number);
+  const etStr = now.toLocaleString("en-US", { timeZone: "America/New_York", hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const [h, m, s] = etStr.split(":").map(Number);
+  const etSec = h * 3600 + m * 60 + s;
   const etMin = h * 60 + m;
   const day = now.getDay();
   const weekend = day === 0 || day === 6;
 
   if (!weekend && etMin >= 9 * 60 + 30 && etMin < 16 * 60) {
     // Market open — time until 4pm ET
-    const closeMin = 16 * 60;
-    return { label: "closes in", ms: (closeMin - etMin) * 60_000 };
+    const closeSec = 16 * 3600;
+    return { label: "closes in", ms: (closeSec - etSec) * 1000 };
   }
 
   // Market closed — time until next 9:30am ET
@@ -251,9 +252,9 @@ export function marketCountdown(): { label: string; ms: number } {
   } else if (etMin >= 16 * 60) {
     daysUntil = day === 5 ? 3 : 1; // Fri after close→Mon, else next day
   }
-  // minutes until 9:30 on the target day
-  const minUntilOpen = daysUntil * 24 * 60 + (9 * 60 + 30 - etMin);
-  return { label: "opens in", ms: Math.max(0, minUntilOpen * 60_000) };
+  const openSec = 9 * 3600 + 30 * 60;
+  const secUntilOpen = daysUntil * 86400 + (openSec - etSec);
+  return { label: "opens in", ms: Math.max(0, secUntilOpen * 1000) };
 }
 
 /** Check which tickers need daily price backfill */

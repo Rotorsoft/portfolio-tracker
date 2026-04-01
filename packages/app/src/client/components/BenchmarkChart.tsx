@@ -22,6 +22,7 @@ export function BenchmarkChart({ portfolioId, onSelectTicker }: Props) {
 
   const cols: { key: string; label: string; align: string; border?: boolean }[] = [
     { key: "ticker", label: "Ticker", align: "left" },
+    { key: "weight", label: "Weight", align: "right" },
     { key: "cost", label: "Cost", align: "right" },
     { key: "marketValue", label: "Your Value", align: "right" },
     { key: "actualReturnPct", label: "Your Return", align: "right" },
@@ -33,6 +34,7 @@ export function BenchmarkChart({ portfolioId, onSelectTicker }: Props) {
   const rows = [...summary.positions].map((p) => ({
     ...p,
     cost: p.totalShares * p.avgCostBasis,
+    weight: totalCost > 0 ? (p.totalShares * p.avgCostBasis) / totalCost * 100 : 0,
   })).sort((a, b) => {
     const av = (a as any)[sort.col] ?? 0;
     const bv = (b as any)[sort.col] ?? 0;
@@ -44,8 +46,8 @@ export function BenchmarkChart({ portfolioId, onSelectTicker }: Props) {
     <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
       <div className="flex items-start justify-between mb-4">
         <div>
-          <h3 className="text-sm font-medium text-gray-400">Benchmark vs S&P 500 (VOO)</h3>
-          <p className="text-[10px] text-gray-600 mt-0.5">Compares your actual returns against investing the same $ on the same dates into VOO</p>
+          <h3 className="text-sm font-medium text-gray-400">Attribution — Alpha vs S&P 500 (VOO)</h3>
+          <p className="text-[10px] text-gray-600 mt-0.5">How much each position contributed vs investing the same $ on the same dates into VOO</p>
         </div>
         <div className="flex items-start gap-5 text-right">
           <StatCard label="Your Return" value={fmtPctAbs(actualReturnPct)} color={glColor(actualGL)}
@@ -81,6 +83,7 @@ export function BenchmarkChart({ portfolioId, onSelectTicker }: Props) {
                 <tr key={pos.ticker} onClick={() => onSelectTicker?.(pos.ticker)}
                   className={`border-b border-gray-800/50 ${onSelectTicker ? "cursor-pointer hover:bg-gray-800/30" : ""}`}>
                   <td className="px-3 py-2 text-white font-medium">{pos.ticker}</td>
+                  <td className="px-3 py-2 text-right text-gray-500">{pos.weight.toFixed(1)}%</td>
                   <td className="px-3 py-2 text-right text-gray-300">{fmtUsd(pos.cost)}</td>
                   <td className="px-3 py-2 text-right text-gray-300">{fmtUsd(pos.marketValue)}</td>
                   <td className={`px-3 py-2 text-right font-medium ${glColor(posGL)}`}>{fmtPctAbs(pos.actualReturnPct ?? 0)}</td>
@@ -96,7 +99,7 @@ export function BenchmarkChart({ portfolioId, onSelectTicker }: Props) {
                           <div className="absolute top-0 bottom-0 bg-red-500 rounded-l-full" style={{ width: `${Math.min(50, (Math.abs(alpha) / maxAlpha) * 50)}%`, right: "50%" }} />
                         )}
                       </div>
-                      <span className={`font-bold tabular-nums min-w-[50px] text-left ${alpha >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                      <span className={`font-bold tabular-nums min-w-[60px] text-right ${alpha >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                         {alpha >= 0 ? "+" : ""}{fmtPctAbs(alpha)}
                       </span>
                     </div>
@@ -108,6 +111,7 @@ export function BenchmarkChart({ portfolioId, onSelectTicker }: Props) {
           <tfoot>
             <tr className="border-t border-gray-700 text-sm">
               <td className="px-3 py-3 text-white font-semibold">Total</td>
+              <td className="px-3 py-3 text-right text-gray-500">100%</td>
               <td className="px-3 py-3 text-right text-white font-semibold">{fmtUsd(totalCost)}</td>
               <td className="px-3 py-3 text-right text-white font-semibold">{fmtUsd(totalMarketValue)}</td>
               <td className={`px-3 py-3 text-right font-bold ${glColor(actualGL)}`}>{fmtPctAbs(actualReturnPct)}</td>

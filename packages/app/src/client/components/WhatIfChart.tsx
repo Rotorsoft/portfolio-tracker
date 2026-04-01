@@ -21,7 +21,7 @@ export function WhatIfChart({ portfolioId, cutoffDate, onSelectTicker }: { portf
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-medium text-gray-400">
-            What If I Bought Everything On
+            Scenario — What if I bought everything on
           </h3>
           <DateInput value={whatIfDate} onChange={setWhatIfDate} />
         </div>

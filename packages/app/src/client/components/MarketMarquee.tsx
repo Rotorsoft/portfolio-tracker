@@ -23,6 +23,11 @@ type Props = {
 };
 
 export function MarketMarquee({ now, polling, quotesUpdatedAt, quoteStats, autoBackfilling, quotes }: Props) {
+  const [tick, setTick] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
   const open = isMarketOpen();
   const mc = marketCountdown();
   const target = lastTradingDate();

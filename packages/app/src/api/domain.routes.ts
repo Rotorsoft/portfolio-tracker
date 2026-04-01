@@ -476,4 +476,147 @@ export const domainRouter = t.router({
 
       return { positions: positionInfo, timeline };
     }),
+
+  // === DCA Comparison ===
+  getDCAComparison: publicProcedure
+    .input(z.object({ portfolioId: z.string() }))
+    .query(async ({ input }) => {
+      const positions = await getPositionsByPortfolio(input.portfolioId);
+      const today = new Date().toISOString().split("T")[0];
+      const openPositions = positions.filter((p) => p.status === "open" && (p.totalShares ?? 0) > 0);
+      if (openPositions.length === 0) return { timeline: [] };
+
+      // Find portfolio-wide first and last lot dates
+      let firstDate = today;
+      let lastDate = "2000-01-01";
+      for (const pos of openPositions) {
+        for (const lot of (pos.lots ?? []).filter((l: any) => l.type === "buy")) {
+          if (lot.transactionDate < firstDate) firstDate = lot.transactionDate;
+          if (lot.transactionDate > lastDate) lastDate = lot.transactionDate;
+        }
+      }
+
+      // Batch-fetch all prices from firstDate to today
+      const tickers = openPositions.map((p) => p.ticker);
+      const allPricesMap: Record<string, Record<string, number>> = {};
+      for (const t of tickers) {
+        const prices = await getTickerPrices(t, firstDate, today);
+        allPricesMap[t] = {};
+        for (const p of prices) allPricesMap[t][p.date] = p.close;
+      }
+
+      // Collect sorted trading dates
+      const tradingDates = new Set<string>();
+      for (const t of tickers) for (const d of Object.keys(allPricesMap[t])) tradingDates.add(d);
+      const sortedDates = [...tradingDates].sort();
+      if (sortedDates.length === 0) return { timeline: [] };
+
+      // For each position, compute DCA schedule: spread total cost evenly across trading days from first to last lot
+      // Single-lot positions: DCA = actual (nothing to spread), use actual lot as-is
+      const dcaSchedule: Record<string, { dailyInvestment: number; fromDate: string; toDate: string; singleLot: boolean }> = {};
+      for (const pos of openPositions) {
+        const buyLots = (pos.lots ?? []).filter((l: any) => l.type === "buy");
+        const lotDates = buyLots.map((l: any) => l.transactionDate).sort();
+        const from = lotDates[0];
+        const to = lotDates[lotDates.length - 1];
+        const singleLot = from === to;
+        const tradingDaysInRange = singleLot ? 1 : sortedDates.filter((d) => d >= from && d <= to).length;
+        const totalInvested = pos.totalCost ?? 0;
+        dcaSchedule[pos.ticker] = {
+          dailyInvestment: tradingDaysInRange > 0 ? totalInvested / tradingDaysInRange : 0,
+          fromDate: from,
+          toDate: to,
+          singleLot,
+        };
+      }
+
+      // Build timeline
+      const lastPrice: Record<string, number> = {};
+      const dcaShares: Record<string, number> = {};
+      const dcaCost: Record<string, number> = {};
+      for (const t of tickers) { dcaShares[t] = 0; dcaCost[t] = 0; }
+
+      const timeline: Array<{
+        date: string;
+        actualValue: number;
+        actualCost: number;
+        dcaValue: number;
+        dcaCostCum: number;
+        delta: number;
+      }> = [];
+
+      for (const dateStr of sortedDates) {
+        let actualValue = 0;
+        let actualCostAtDate = 0;
+        let dcaValue = 0;
+
+        for (const pos of openPositions) {
+          const closePrice = allPricesMap[pos.ticker]?.[dateStr] ?? lastPrice[pos.ticker] ?? 0;
+          if (allPricesMap[pos.ticker]?.[dateStr]) lastPrice[pos.ticker] = closePrice;
+
+          // Actual portfolio
+          let sharesAtDate = 0;
+          let costAtDate = 0;
+          for (const lot of pos.lots ?? []) {
+            if (lot.transactionDate <= dateStr) {
+              if (lot.type === "buy") { sharesAtDate += lot.quantity; costAtDate += lot.quantity * lot.price + lot.fees; }
+              else { sharesAtDate -= lot.quantity; costAtDate -= lot.quantity * lot.price - lot.fees; }
+            }
+          }
+          if (sharesAtDate > 0) {
+            actualValue += sharesAtDate * closePrice;
+            actualCostAtDate += costAtDate;
+          }
+
+          // DCA portfolio — buy daily during the position's lot range
+          const sched = dcaSchedule[pos.ticker];
+          if (sched && closePrice > 0) {
+            if (sched.singleLot) {
+              // Single lot: mirror actual purchase exactly
+              if (dateStr === sched.fromDate) {
+                dcaShares[pos.ticker] = (pos.totalShares ?? 0);
+                dcaCost[pos.ticker] = (pos.totalCost ?? 0);
+              }
+            } else if (dateStr >= sched.fromDate && dateStr <= sched.toDate) {
+              dcaShares[pos.ticker] += sched.dailyInvestment / closePrice;
+              dcaCost[pos.ticker] += sched.dailyInvestment;
+            }
+          }
+          dcaValue += dcaShares[pos.ticker] * closePrice;
+        }
+
+        const dcaCostCum = Object.values(dcaCost).reduce((s, v) => s + v, 0);
+        timeline.push({
+          date: dateStr,
+          actualValue,
+          actualCost: actualCostAtDate,
+          dcaValue,
+          dcaCostCum,
+          delta: actualValue - dcaValue,
+        });
+      }
+
+      // Per-position DCA breakdown using the same computation as the timeline
+      const perPosition = openPositions.map((pos) => {
+        const actualShares = pos.totalShares ?? 0;
+        const actualCost = pos.totalCost ?? 0;
+        const lastPriceVal = lastPrice[pos.ticker] ?? 0;
+        const actualValue = actualShares * lastPriceVal;
+        const dcaSharesFinal = dcaShares[pos.ticker] ?? 0;
+        const dcaCostFinal = dcaCost[pos.ticker] ?? 0;
+        const dcaValueFinal = dcaSharesFinal * lastPriceVal;
+        return {
+          ticker: pos.ticker,
+          actualCost,
+          actualValue,
+          actualShares,
+          dcaCost: dcaCostFinal,
+          dcaValue: dcaValueFinal,
+          dcaShares: dcaSharesFinal,
+          singleLot: dcaSchedule[pos.ticker]?.singleLot ?? true,
+        };
+      });
+
+      return { timeline, positions: perPosition };
+    }),
 });

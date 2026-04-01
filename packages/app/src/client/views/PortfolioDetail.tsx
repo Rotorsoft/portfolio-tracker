@@ -15,6 +15,7 @@ import { InfoTip } from "../components/InfoTip.js";
 import { MarketMarquee } from "../components/MarketMarquee.js";
 import { AddTickersForm, AddLotsForm } from "../components/AddForms.js";
 import { BenchmarkChart } from "../components/BenchmarkChart.js";
+import { DCAChart } from "../components/DCAChart.js";
 import { Modal } from "../components/Modal.js";
 import { FiftyTwoWeekBar } from "../components/FiftyTwoWeekBar.js";
 
@@ -40,7 +41,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
   const subTab = route.page === "portfolio" ? route.tab : "positions";
   const setSubTab = (tab: SubTab) => nav.toPortfolio(portfolioId, tab);
   const [showSettings, setShowSettings] = useState(false);
-  const [analysisMode, setAnalysisMode] = useState<"benchmark" | "whatif">("benchmark");
+  const [analysisMode, setAnalysisMode] = useState<"benchmark" | "whatif" | "dca">("benchmark");
   const [extraTickers, setExtraTickers] = useState<string[]>([]);
   const [showAdd, setShowAdd] = useState<false | "positions" | "lots">(false);
   const closeAdd = useCallback(() => setShowAdd(false), []);
@@ -177,7 +178,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
 
   const subTabs: { id: SubTab; label: string; icon: React.ReactNode }[] = [
     { id: "positions", label: "Positions", icon: <LayoutList size={14} /> },
-    { id: "analysis", label: "Analysis", icon: <BarChart3 size={14} /> },
+    { id: "analysis", label: "Performance", icon: <BarChart3 size={14} /> },
     { id: "prices", label: "Price Data", icon: <Database size={14} /> },
   ];
 
@@ -438,8 +439,9 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
         <div className="space-y-4">
           <div className="flex gap-2">
             {([
-              { id: "benchmark", label: "Benchmark vs S&P 500" },
-              { id: "whatif", label: "What-If Single Date" },
+              { id: "benchmark", label: "Attribution" },
+              { id: "dca", label: "DCA" },
+              { id: "whatif", label: "Scenario" },
             ] as const).map((m) => (
               <button key={m.id} onClick={() => setAnalysisMode(m.id)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${analysisMode === m.id ? "bg-indigo-600 text-white" : "text-gray-500 hover:text-white hover:bg-gray-800/50"}`}>
@@ -448,6 +450,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
             ))}
           </div>
           {analysisMode === "benchmark" && <BenchmarkChart portfolioId={portfolioId} onSelectTicker={(ticker) => nav.toPosition(portfolioId, ticker)} />}
+          {analysisMode === "dca" && <DCAChart portfolioId={portfolioId} onSelectTicker={(ticker) => nav.toPosition(portfolioId, ticker)} />}
           {analysisMode === "whatif" && <WhatIfChart portfolioId={portfolioId} cutoffDate={cutoffDate} onSelectTicker={(ticker) => nav.toPosition(portfolioId, ticker)} />}
         </div>
       )}
