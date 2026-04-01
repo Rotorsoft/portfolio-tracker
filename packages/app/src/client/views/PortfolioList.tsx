@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Plus, X } from "lucide-react";
+import { Plus } from "lucide-react";
+import { Modal } from "../components/Modal.js";
 import { trpc } from "../trpc.js";
 import { fmtUsd, fmtUsdAbs, fmtPctAbs, glColor } from "../fmt.js";
 import { shouldPollQuotes, livePortfolioTotals, livePortfolioDayChange } from "../live.js";
@@ -42,23 +43,22 @@ export function PortfolioList({ onSelect }: { onSelect: (id: string) => void }) 
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold text-white">Portfolios</h2>
-        <ActionButton onClick={() => setShowCreate(!showCreate)}>
-          {showCreate ? <><X size={14} /> Cancel</> : <><Plus size={14} /> New Portfolio</>}
+        <ActionButton onClick={() => setShowCreate(true)}>
+          <Plus size={14} /> New Portfolio
         </ActionButton>
       </div>
 
-      {showCreate && (
-        <form onSubmit={handleCreate} className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-6 space-y-3">
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="New Portfolio">
+        <form onSubmit={handleCreate} className="space-y-3">
           <FormInput type="text" placeholder="Portfolio name" value={name} onChange={(e) => setName(e.target.value)} autoFocus required />
           <FormInput type="text" placeholder="Description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} />
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-500">Cutoff Date</label>
-            <input type="date" value={cutoffDate} onChange={(e) => setCutoffDate(e.target.value)}
-              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white" />
+          <FormInput type="date" label="Cutoff Date" value={cutoffDate} onChange={(e) => setCutoffDate(e.target.value)} />
+          <div className="flex gap-2">
+            <ActionButton type="submit"><Plus size={14} /> Create</ActionButton>
+            <ActionButton variant="secondary" type="button" onClick={() => setShowCreate(false)}>Cancel</ActionButton>
           </div>
-          <ActionButton type="submit"><Plus size={14} /> Create</ActionButton>
         </form>
-      )}
+      </Modal>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {portfolios?.map((p) => (
