@@ -64,11 +64,12 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
   const polling = shouldPollQuotes();
   const INDEX_SYMBOLS = ["^DJI", "^GSPC", "^IXIC"];
   const allSymbols = [...new Set([...tickerSymbols, ...INDEX_SYMBOLS])];
+  const refreshMs = (portfolio?.refreshInterval ?? 300) * 1000;
   const { data: liveQuotes, dataUpdatedAt: quotesUpdatedAt } = trpc.getQuotes.useQuery(
     { symbols: allSymbols },
-    { enabled: allSymbols.length > 0, refetchInterval: polling ? 300_000 : false }
+    { enabled: allSymbols.length > 0, refetchInterval: polling ? refreshMs : false }
   );
-  const { data: quoteStats } = trpc.getQuoteStats.useQuery(undefined, { refetchInterval: polling ? 300_000 : false });
+  const { data: quoteStats } = trpc.getQuoteStats.useQuery(undefined, { refetchInterval: polling ? refreshMs : false });
   const getSortVal = (pos: any, col: string) => {
     if (col === "52wk") { const f = bulkFundamentals?.[pos.ticker]; const lo = f?.fiftyTwoWeekLow ?? 0; const hi = f?.fiftyTwoWeekHigh ?? 0; const price = getLivePrice(liveQuotes, pos.ticker, pos.currentPrice); return hi > lo ? (price - lo) / (hi - lo) : 0; }
     if (col === "unrealizedGL" || col === "unrealizedGLPercent") {
@@ -625,6 +626,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
           currency={portfolio.currency}
           cutoffDate={portfolio.cutoffDate ?? ""}
           dipThreshold={portfolio.dipThreshold ?? 5}
+          refreshInterval={portfolio.refreshInterval ?? 300}
           onClose={() => setShowSettings(false)}
         />
       )}

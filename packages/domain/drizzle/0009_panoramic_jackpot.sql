@@ -1,0 +1,1 @@
+ALTER TABLE "portfolios" ADD COLUMN "refresh_interval" integer DEFAULT 300 NOT NULL;

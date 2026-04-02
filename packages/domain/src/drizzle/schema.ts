@@ -24,6 +24,7 @@ export const portfolios = pgTable("portfolios", {
   status: text("status").notNull().default("active"),
   cutoffDate: text("cutoff_date").notNull().default(""),
   dipThreshold: real("dip_threshold").notNull().default(5),
+  refreshInterval: integer("refresh_interval").notNull().default(300),
   createdBy: text("created_by").notNull().default(""),
   createdAt: text("created_at").notNull().default(""),
   updatedAt: text("updated_at").notNull().default(""),

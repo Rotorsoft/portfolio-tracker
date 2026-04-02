@@ -29,6 +29,8 @@ export const domainRouter = t.router({
       description: z.string().optional(),
       currency: z.string().optional(),
       cutoffDate: z.string().optional(),
+      dipThreshold: z.number().min(0).max(50).optional(),
+      refreshInterval: z.number().min(10).max(3600).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const stream = `portfolio-${crypto.randomUUID()}`;
@@ -44,6 +46,7 @@ export const domainRouter = t.router({
       currency: z.string().optional(),
       cutoffDate: z.string().optional(),
       dipThreshold: z.number().min(0).max(50).optional(),
+      refreshInterval: z.number().min(10).max(3600).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const { id, ...data } = input;

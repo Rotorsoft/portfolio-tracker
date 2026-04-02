@@ -78,6 +78,8 @@ export const CreatePortfolio = z.object({
   description: z.string().optional().default(""),
   currency: z.string().optional().default("USD"),
   cutoffDate: z.iso.date().optional(),
+  dipThreshold: z.number().min(0).max(50).optional().default(5),
+  refreshInterval: z.number().min(10).max(3600).optional().default(300),
 });
 export const UpdatePortfolio = z.object({
   name: z.string().min(1).optional(),
@@ -85,6 +87,7 @@ export const UpdatePortfolio = z.object({
   currency: z.string().optional(),
   cutoffDate: z.iso.date().optional(),
   dipThreshold: z.number().min(0).max(50).optional(),
+  refreshInterval: z.number().min(10).max(3600).optional(),
 });
 export const ArchivePortfolio = ZodEmpty;
 
@@ -110,6 +113,8 @@ export const PortfolioCreated = z.object({
   description: z.string(),
   currency: z.string(),
   cutoffDate: z.iso.date().optional(),
+  dipThreshold: z.number().optional(),
+  refreshInterval: z.number().optional(),
   createdBy: z.string(),
 });
 export const PortfolioUpdated = z.object({
@@ -118,6 +123,7 @@ export const PortfolioUpdated = z.object({
   currency: z.string().optional(),
   cutoffDate: z.iso.date().optional(),
   dipThreshold: z.number().optional(),
+  refreshInterval: z.number().optional(),
 });
 export const PortfolioArchived = ZodEmpty;
 export const PositionOpened = z.object({
