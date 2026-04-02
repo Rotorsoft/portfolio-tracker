@@ -59,11 +59,13 @@ export function PortfolioSettings({ portfolioId, name: initName, description: in
       <div className="space-y-4">
         <FormInput label="Name" type="text" value={name} onChange={(e) => setName(e.target.value)} />
         <FormInput label="Description" type="text" value={description} onChange={(e) => setDescription(e.target.value)} />
-        <FormInput label="Cutoff Date" type="date" value={cutoffDate} onChange={(e) => setCutoffDate(e.target.value)}
-          hint="Earliest date for price backfills, charts, and analytics" />
-        <FormInput label="Dip Threshold (%)" type="number" min={0} max={50} step={1} value={dipThreshold}
-          onChange={(e) => setDipThreshold(Number(e.target.value))}
-          hint="Price drop % below last buy to highlight avg-down opportunities" />
+        <div className="grid grid-cols-2 gap-4">
+          <FormInput label="Cutoff Date" type="date" value={cutoffDate} onChange={(e) => setCutoffDate(e.target.value)}
+            hint="Earliest date for backfills and charts" />
+          <FormInput label="Dip Threshold (%)" type="number" min={0} max={50} step={1} value={dipThreshold}
+            onChange={(e) => setDipThreshold(Number(e.target.value))}
+            hint="Drop % below last buy for avg-down" />
+        </div>
         <div>
           <label className="block text-xs text-gray-400 mb-1">Live Refresh Interval</label>
           <div className="flex flex-wrap gap-1.5">
