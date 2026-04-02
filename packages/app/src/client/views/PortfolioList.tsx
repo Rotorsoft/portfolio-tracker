@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Plus, Settings } from "lucide-react";
 import { PortfolioSettings } from "../components/PortfolioSettings.js";
 import { Modal } from "../components/Modal.js";
@@ -21,11 +21,6 @@ export function PortfolioList({ onSelect }: { onSelect: (id: string) => void }) 
     { enabled: allSymbols.length > 0, refetchInterval: polling ? refreshMs : false }
   );
   const { data: quoteStats } = trpc.getQuoteStats.useQuery(undefined, { refetchInterval: polling ? refreshMs : false });
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(id);
-  }, []);
   const createMutation = trpc.createPortfolio.useMutation();
   const utils = trpc.useUtils();
   const [showCreate, setShowCreate] = useState(false);
@@ -57,7 +52,7 @@ export function PortfolioList({ onSelect }: { onSelect: (id: string) => void }) 
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold text-white">Portfolios</h2>
-        <MarketMarquee now={now} polling={polling} quotesUpdatedAt={quotesUpdatedAt} quoteStats={quoteStats} autoBackfilling={false} quotes={liveQuotes} refreshMs={refreshMs} />
+        <MarketMarquee polling={polling} quotesUpdatedAt={quotesUpdatedAt} quoteStats={quoteStats} autoBackfilling={false} quotes={liveQuotes} refreshMs={refreshMs} />
       </div>
 
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="New Portfolio">

@@ -14,7 +14,6 @@ function fmtIndex(n: number): string {
 }
 
 type Props = {
-  now: number;
   polling: boolean;
   quotesUpdatedAt: number | undefined;
   quoteStats: { refreshCount: number; lastRefreshTs: number | null } | undefined;
@@ -23,7 +22,7 @@ type Props = {
   refreshMs?: number;
 };
 
-export function MarketMarquee({ now, polling, quotesUpdatedAt, quoteStats, autoBackfilling, quotes, refreshMs = 300_000 }: Props) {
+export function MarketMarquee({ polling, quotesUpdatedAt, quoteStats, autoBackfilling, quotes, refreshMs = 300_000 }: Props) {
   const [tick, setTick] = useState(Date.now());
   useEffect(() => {
     const id = setInterval(() => setTick(Date.now()), 1000);
@@ -41,7 +40,7 @@ export function MarketMarquee({ now, polling, quotesUpdatedAt, quoteStats, autoB
   }, [quotes]);
 
   const refreshCount = quoteStats?.refreshCount ?? 0;
-  const nextUpdateIn = quotesUpdatedAt ? Math.max(0, refreshMs - (now - quotesUpdatedAt)) : 0;
+  const nextUpdateIn = quotesUpdatedAt ? Math.max(0, refreshMs - (tick - quotesUpdatedAt)) : 0;
   const refreshLabel = refreshMs >= 60_000 ? `${Math.round(refreshMs / 60_000)} min` : `${Math.round(refreshMs / 1000)}s`;
 
   const tooltipLabel = open ? (

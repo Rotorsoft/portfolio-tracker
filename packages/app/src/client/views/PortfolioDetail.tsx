@@ -56,11 +56,6 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
   const { data: allTickerData } = trpc.getTickers.useQuery();
   const tickerSymbols = positions?.map((p) => p.ticker).filter(Boolean) ?? [];
   const nonPortfolioTickers = (allTickerData ?? []).filter((t) => !tickerSymbols.includes(t.symbol)).map((t) => t.symbol);
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(id);
-  }, []);
   const polling = shouldPollQuotes();
   const INDEX_SYMBOLS = ["^DJI", "^GSPC", "^IXIC"];
   const allSymbols = [...new Set([...tickerSymbols, ...INDEX_SYMBOLS])];
@@ -183,7 +178,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
     { id: "prices", label: "Price Data", icon: <Database size={14} /> },
   ];
 
-  const livePanel = <MarketMarquee now={now} polling={polling} quotesUpdatedAt={quotesUpdatedAt} quoteStats={quoteStats} autoBackfilling={autoBackfilling} quotes={liveQuotes} refreshMs={refreshMs} />;
+  const livePanel = <MarketMarquee polling={polling} quotesUpdatedAt={quotesUpdatedAt} quoteStats={quoteStats} autoBackfilling={autoBackfilling} quotes={liveQuotes} refreshMs={refreshMs} />;
 
   if (route.page === "position" && route.portfolioId === portfolioId) {
     const pos = positions?.find((p) => p.ticker === route.ticker);
