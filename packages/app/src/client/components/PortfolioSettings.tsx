@@ -20,17 +20,15 @@ type Props = {
   portfolioId: string;
   name: string;
   description: string;
-  currency: string;
   cutoffDate: string;
   dipThreshold: number;
   refreshInterval: number;
   onClose: () => void;
 };
 
-export function PortfolioSettings({ portfolioId, name: initName, description: initDesc, currency: initCurrency, cutoffDate: initCutoff, dipThreshold: initDip, refreshInterval: initRefresh, onClose }: Props) {
+export function PortfolioSettings({ portfolioId, name: initName, description: initDesc, cutoffDate: initCutoff, dipThreshold: initDip, refreshInterval: initRefresh, onClose }: Props) {
   const [name, setName] = useState(initName);
   const [description, setDescription] = useState(initDesc);
-  const [currency, setCurrency] = useState(initCurrency);
   const [cutoffDate, setCutoffDate] = useState(initCutoff);
   const [dipThreshold, setDipThreshold] = useState(initDip);
   const [refreshInterval, setRefreshInterval] = useState(initRefresh);
@@ -44,7 +42,6 @@ export function PortfolioSettings({ portfolioId, name: initName, description: in
       const patch: Record<string, unknown> = { id: portfolioId };
       if (name !== initName) patch.name = name;
       if (description !== initDesc) patch.description = description;
-      if (currency !== initCurrency) patch.currency = currency;
       if (cutoffDate !== initCutoff) patch.cutoffDate = cutoffDate;
       if (dipThreshold !== initDip) patch.dipThreshold = dipThreshold;
       if (refreshInterval !== initRefresh) patch.refreshInterval = refreshInterval;
@@ -62,10 +59,8 @@ export function PortfolioSettings({ portfolioId, name: initName, description: in
       <div className="space-y-4">
         <FormInput label="Name" type="text" value={name} onChange={(e) => setName(e.target.value)} />
         <FormInput label="Description" type="text" value={description} onChange={(e) => setDescription(e.target.value)} />
-        <div className="grid grid-cols-2 gap-4">
-          <FormInput label="Currency" type="text" value={currency} onChange={(e) => setCurrency(e.target.value)} />
-          <FormInput label="Cutoff Date" type="date" value={cutoffDate} onChange={(e) => setCutoffDate(e.target.value)} />
-        </div>
+        <FormInput label="Cutoff Date" type="date" value={cutoffDate} onChange={(e) => setCutoffDate(e.target.value)}
+          hint="Earliest date for price backfills, charts, and analytics" />
         <FormInput label="Dip Threshold (%)" type="number" min={0} max={50} step={1} value={dipThreshold}
           onChange={(e) => setDipThreshold(Number(e.target.value))}
           hint="Price drop % below last buy to highlight avg-down opportunities" />

@@ -29,7 +29,6 @@ export function PortfolioList({ onSelect }: { onSelect: (id: string) => void }) 
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [currency, setCurrency] = useState("USD");
   const [cutoffDate, setCutoffDate] = useState(new Date().toISOString().split("T")[0]);
   const [dipThreshold, setDipThreshold] = useState(5);
   const [refreshInterval, setRefreshInterval] = useState(300);
@@ -38,12 +37,11 @@ export function PortfolioList({ onSelect }: { onSelect: (id: string) => void }) 
     e.preventDefault();
     if (!name.trim()) return;
     try {
-      await createMutation.mutateAsync({ name: name.trim(), description: description.trim(), currency, cutoffDate, dipThreshold, refreshInterval });
+      await createMutation.mutateAsync({ name: name.trim(), description: description.trim(), cutoffDate, dipThreshold, refreshInterval });
       utils.getPortfolios.invalidate();
       setShowCreate(false);
       setName("");
       setDescription("");
-      setCurrency("USD");
       setDipThreshold(5);
       setRefreshInterval(300);
     } catch (err) {
@@ -64,10 +62,8 @@ export function PortfolioList({ onSelect }: { onSelect: (id: string) => void }) 
         <form onSubmit={handleCreate} className="space-y-4">
           <FormInput label="Name" type="text" placeholder="Portfolio name" value={name} onChange={(e) => setName(e.target.value)} autoFocus required />
           <FormInput label="Description" type="text" placeholder="Optional" value={description} onChange={(e) => setDescription(e.target.value)} />
-          <div className="grid grid-cols-2 gap-4">
-            <FormInput label="Currency" type="text" value={currency} onChange={(e) => setCurrency(e.target.value)} />
-            <FormInput label="Cutoff Date" type="date" value={cutoffDate} onChange={(e) => setCutoffDate(e.target.value)} />
-          </div>
+          <FormInput label="Cutoff Date" type="date" value={cutoffDate} onChange={(e) => setCutoffDate(e.target.value)}
+            hint="Earliest date for price backfills, charts, and analytics" />
           <FormInput label="Dip Threshold (%)" type="number" min={0} max={50} step={1} value={dipThreshold}
             onChange={(e) => setDipThreshold(Number(e.target.value))}
             hint="Price drop % below last buy to highlight avg-down opportunities" />

@@ -76,7 +76,7 @@ export type PriceRecord = z.infer<typeof PriceRecord>;
 export const CreatePortfolio = z.object({
   name: z.string().min(1),
   description: z.string().optional().default(""),
-  currency: z.string().optional().default("USD"),
+
   cutoffDate: z.iso.date().optional(),
   dipThreshold: z.number().min(0).max(50).optional().default(5),
   refreshInterval: z.number().min(10).max(3600).optional().default(300),
@@ -84,7 +84,7 @@ export const CreatePortfolio = z.object({
 export const UpdatePortfolio = z.object({
   name: z.string().min(1).optional(),
   description: z.string().optional(),
-  currency: z.string().optional(),
+
   cutoffDate: z.iso.date().optional(),
   dipThreshold: z.number().min(0).max(50).optional(),
   refreshInterval: z.number().min(10).max(3600).optional(),
@@ -111,7 +111,7 @@ export const RemoveLot = z.object({
 export const PortfolioCreated = z.object({
   name: z.string(),
   description: z.string(),
-  currency: z.string(),
+
   cutoffDate: z.iso.date().optional(),
   dipThreshold: z.number().optional(),
   refreshInterval: z.number().optional(),
@@ -120,7 +120,7 @@ export const PortfolioCreated = z.object({
 export const PortfolioUpdated = z.object({
   name: z.string().optional(),
   description: z.string().optional(),
-  currency: z.string().optional(),
+
   cutoffDate: z.iso.date().optional(),
   dipThreshold: z.number().optional(),
   refreshInterval: z.number().optional(),
@@ -146,7 +146,6 @@ export const LotRemoved = z.object({
 export const PortfolioState = z.object({
   name: z.string(),
   description: z.string(),
-  currency: z.string(),
   cutoffDate: z.string().optional(),
   status: z.string(),
   createdBy: z.string(),

@@ -33,7 +33,6 @@ export const Portfolio = state({ Portfolio: PortfolioState })
   .init(() => ({
     name: "",
     description: "",
-    currency: "USD",
     cutoffDate: undefined,
     status: "active",
     createdBy: "",
@@ -52,7 +51,6 @@ export const Portfolio = state({ Portfolio: PortfolioState })
     PortfolioCreated: ({ data }) => ({
       name: data.name,
       description: data.description,
-      currency: data.currency,
       cutoffDate: data.cutoffDate,
       dipThreshold: data.dipThreshold,
       refreshInterval: data.refreshInterval,
@@ -62,7 +60,6 @@ export const Portfolio = state({ Portfolio: PortfolioState })
     PortfolioUpdated: ({ data }) => ({
       ...(data.name !== undefined ? { name: data.name } : {}),
       ...(data.description !== undefined ? { description: data.description } : {}),
-      ...(data.currency !== undefined ? { currency: data.currency } : {}),
       ...(data.cutoffDate !== undefined ? { cutoffDate: data.cutoffDate } : {}),
       ...(data.dipThreshold !== undefined ? { dipThreshold: data.dipThreshold } : {}),
       ...(data.refreshInterval !== undefined ? { refreshInterval: data.refreshInterval } : {}),
@@ -115,7 +112,6 @@ export const Portfolio = state({ Portfolio: PortfolioState })
     {
       name: data.name,
       description: data.description ?? "",
-      currency: data.currency ?? "USD",
       cutoffDate: data.cutoffDate,
       dipThreshold: data.dipThreshold ?? 5,
       refreshInterval: data.refreshInterval ?? 300,
@@ -284,7 +280,6 @@ export const PortfolioProjection = projection("portfolios")
       id: stream,
       name: str(data.name),
       description: str(data.description),
-      currency: str(data.currency),
       cutoffDate: str(data.cutoffDate),
       dipThreshold: data.dipThreshold ?? 5,
       refreshInterval: data.refreshInterval ?? 300,
@@ -294,7 +289,7 @@ export const PortfolioProjection = projection("portfolios")
       updatedAt: "",
     }).onConflictDoUpdate({
       target: portfolios.id,
-      set: { name: str(data.name), description: str(data.description), currency: str(data.currency), cutoffDate: str(data.cutoffDate), dipThreshold: data.dipThreshold ?? 5, refreshInterval: data.refreshInterval ?? 300, status: "active", createdBy: str(data.createdBy), createdAt: created.toISOString() },
+      set: { name: str(data.name), description: str(data.description), cutoffDate: str(data.cutoffDate), dipThreshold: data.dipThreshold ?? 5, refreshInterval: data.refreshInterval ?? 300, status: "active", createdBy: str(data.createdBy), createdAt: created.toISOString() },
     });
   })
   .on({ PortfolioUpdated })
@@ -302,7 +297,6 @@ export const PortfolioProjection = projection("portfolios")
     const updates: Record<string, unknown> = { updatedAt: created.toISOString() };
     if (data.name !== undefined) updates.name = str(data.name);
     if (data.description !== undefined) updates.description = str(data.description);
-    if (data.currency !== undefined) updates.currency = str(data.currency);
     if (data.cutoffDate !== undefined) updates.cutoffDate = str(data.cutoffDate);
     if (data.dipThreshold !== undefined) updates.dipThreshold = data.dipThreshold;
     if (data.refreshInterval !== undefined) updates.refreshInterval = data.refreshInterval;

@@ -623,7 +623,6 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
           portfolioId={portfolioId}
           name={portfolio.name}
           description={portfolio.description}
-          currency={portfolio.currency}
           cutoffDate={portfolio.cutoffDate ?? ""}
           dipThreshold={portfolio.dipThreshold ?? 5}
           refreshInterval={portfolio.refreshInterval ?? 300}

@@ -27,7 +27,6 @@ export const domainRouter = t.router({
     .input(z.object({
       name: z.string().min(1),
       description: z.string().optional(),
-      currency: z.string().optional(),
       cutoffDate: z.string().optional(),
       dipThreshold: z.number().min(0).max(50).optional(),
       refreshInterval: z.number().min(10).max(3600).optional(),
@@ -43,7 +42,6 @@ export const domainRouter = t.router({
       id: z.string(),
       name: z.string().min(1).optional(),
       description: z.string().optional(),
-      currency: z.string().optional(),
       cutoffDate: z.string().optional(),
       dipThreshold: z.number().min(0).max(50).optional(),
       refreshInterval: z.number().min(10).max(3600).optional(),
