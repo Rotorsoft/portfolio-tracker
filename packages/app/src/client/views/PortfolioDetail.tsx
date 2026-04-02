@@ -183,7 +183,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
     { id: "prices", label: "Price Data", icon: <Database size={14} /> },
   ];
 
-  const livePanel = <MarketMarquee now={now} polling={polling} quotesUpdatedAt={quotesUpdatedAt} quoteStats={quoteStats} autoBackfilling={autoBackfilling} quotes={liveQuotes} />;
+  const livePanel = <MarketMarquee now={now} polling={polling} quotesUpdatedAt={quotesUpdatedAt} quoteStats={quoteStats} autoBackfilling={autoBackfilling} quotes={liveQuotes} refreshMs={refreshMs} />;
 
   if (route.page === "position" && route.portfolioId === portfolioId) {
     const pos = positions?.find((p) => p.ticker === route.ticker);
@@ -195,7 +195,7 @@ export function PortfolioDetail({ portfolioId, onBack }: Props) {
           {livePanel}
         </div>
         <PositionDetail positionId={pos.id} portfolioId={portfolioId} ticker={route.ticker} cutoffDate={cutoffDate}
-          dipThreshold={portfolio?.dipThreshold ?? 5} />
+          dipThreshold={portfolio?.dipThreshold ?? 5} refreshMs={refreshMs} />
       </div>
     );
   }

@@ -10,7 +10,7 @@ import { Modal } from "../components/Modal.js";
 import { AddSingleLotForm } from "../components/AddForms.js";
 import { getLiveAlerts, liveDayChange, livePositionGL, lastBuyPrice, avgDownOpportunity, avgDownColor, gradeColor, shouldPollQuotes } from "../live.js";
 
-type Props = { positionId: string; portfolioId: string; ticker: string; cutoffDate?: string; dipThreshold?: number };
+type Props = { positionId: string; portfolioId: string; ticker: string; cutoffDate?: string; dipThreshold?: number; refreshMs?: number };
 
 type KV = { label: string; value: React.ReactNode; color?: string; tooltip?: React.ReactNode };
 
@@ -23,12 +23,12 @@ function KVRow({ kv }: { kv: KV }) {
   );
 }
 
-export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, dipThreshold = 5 }: Props) {
+export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, dipThreshold = 5, refreshMs = 300_000 }: Props) {
   const { data: position } = trpc.getPosition.useQuery({ positionId });
   const { data: tickerInfo } = trpc.getTicker.useQuery({ symbol: ticker });
   const { data: liveQuotes } = trpc.getQuotes.useQuery(
     { symbols: [ticker] },
-    { refetchInterval: shouldPollQuotes() ? 300_000 : false }
+    { refetchInterval: shouldPollQuotes() ? refreshMs : false }
   );
   const liveQuote = liveQuotes?.[ticker];
   const { data: entry } = trpc.getEntryAnalysis.useQuery({ positionId });
@@ -256,7 +256,7 @@ export function PositionDetail({ positionId, portfolioId, ticker, cutoffDate, di
         );
       })()}
 
-      <TickerChart symbol={position.ticker} lots={position.lots ?? []} cutoffDate={cutoffDate} highlightLot={highlightLot} />
+      <TickerChart symbol={position.ticker} lots={position.lots ?? []} cutoffDate={cutoffDate} highlightLot={highlightLot} refreshMs={refreshMs} />
 
       {/* Lots Table — consolidated with entry analysis */}
       {(() => {

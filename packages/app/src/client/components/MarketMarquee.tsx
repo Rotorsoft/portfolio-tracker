@@ -20,9 +20,10 @@ type Props = {
   quoteStats: { refreshCount: number; lastRefreshTs: number | null } | undefined;
   autoBackfilling: boolean;
   quotes: LiveQuotes | undefined;
+  refreshMs?: number;
 };
 
-export function MarketMarquee({ now, polling, quotesUpdatedAt, quoteStats, autoBackfilling, quotes }: Props) {
+export function MarketMarquee({ now, polling, quotesUpdatedAt, quoteStats, autoBackfilling, quotes, refreshMs = 300_000 }: Props) {
   const [tick, setTick] = useState(Date.now());
   useEffect(() => {
     const id = setInterval(() => setTick(Date.now()), 1000);
@@ -40,7 +41,8 @@ export function MarketMarquee({ now, polling, quotesUpdatedAt, quoteStats, autoB
   }, [quotes]);
 
   const refreshCount = quoteStats?.refreshCount ?? 0;
-  const nextUpdateIn = quotesUpdatedAt ? Math.max(0, 300_000 - (now - quotesUpdatedAt)) : 0;
+  const nextUpdateIn = quotesUpdatedAt ? Math.max(0, refreshMs - (now - quotesUpdatedAt)) : 0;
+  const refreshLabel = refreshMs >= 60_000 ? `${Math.round(refreshMs / 60_000)} min` : `${Math.round(refreshMs / 1000)}s`;
 
   const tooltipLabel = open ? (
     <div className="space-y-1.5 text-[11px]">
@@ -51,7 +53,7 @@ export function MarketMarquee({ now, polling, quotesUpdatedAt, quoteStats, autoB
         <span className="text-gray-300">{mc.label} {fmtCountdown(mc.ms)}</span>
       </div>
       <div className="flex items-center gap-3 text-gray-400">
-        <span>Refresh every 5 min</span>
+        <span>Refresh every {refreshLabel}</span>
         <span className="text-gray-500">·</span>
         <span>Next in {fmtCountdown(nextUpdateIn)}</span>
       </div>

@@ -32,6 +32,9 @@ export const domainRouter = t.router({
       refreshInterval: z.number().min(10).max(3600).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
+      const existing = await getPortfolios();
+      if (existing.some((p) => p.name.toLowerCase() === input.name.toLowerCase().trim()))
+        throw new Error("A portfolio with that name already exists");
       const stream = `portfolio-${crypto.randomUUID()}`;
       await doAction("CreatePortfolio", { stream, actor: ctx.actor }, { ...input, cutoffDate: input.cutoffDate ?? "" });
       return { id: stream };
@@ -47,6 +50,11 @@ export const domainRouter = t.router({
       refreshInterval: z.number().min(10).max(3600).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
+      if (input.name !== undefined) {
+        const existing = await getPortfolios();
+        if (existing.some((p) => p.id !== input.id && p.name.toLowerCase() === input.name!.toLowerCase().trim()))
+          throw new Error("A portfolio with that name already exists");
+      }
       const { id, ...data } = input;
       await doAction("UpdatePortfolio", { stream: id, actor: ctx.actor }, data);
       return { success: true };

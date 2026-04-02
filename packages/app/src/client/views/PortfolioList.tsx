@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Settings } from "lucide-react";
+import { PortfolioSettings } from "../components/PortfolioSettings.js";
 import { Modal } from "../components/Modal.js";
 import { MarketMarquee } from "../components/MarketMarquee.js";
 import { trpc } from "../trpc.js";
@@ -12,13 +13,14 @@ export function PortfolioList({ onSelect }: { onSelect: (id: string) => void }) 
   const { data: portfolios, isLoading } = trpc.getPortfolios.useQuery();
   const { data: allTickers } = trpc.getTickers.useQuery();
   const polling = shouldPollQuotes();
+  const refreshMs = Math.min(...(portfolios ?? []).map((p) => (p.refreshInterval ?? 300) * 1000), 300_000);
   const INDEX_SYMBOLS = ["^DJI", "^GSPC", "^IXIC"];
   const allSymbols = [...new Set([...(allTickers?.map((t) => t.symbol) ?? []), ...INDEX_SYMBOLS])];
   const { data: liveQuotes, dataUpdatedAt: quotesUpdatedAt } = trpc.getQuotes.useQuery(
     { symbols: allSymbols },
-    { enabled: allSymbols.length > 0, refetchInterval: polling ? 300_000 : false }
+    { enabled: allSymbols.length > 0, refetchInterval: polling ? refreshMs : false }
   );
-  const { data: quoteStats } = trpc.getQuoteStats.useQuery(undefined, { refetchInterval: polling ? 300_000 : false });
+  const { data: quoteStats } = trpc.getQuoteStats.useQuery(undefined, { refetchInterval: polling ? refreshMs : false });
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 30_000);
@@ -55,7 +57,7 @@ export function PortfolioList({ onSelect }: { onSelect: (id: string) => void }) 
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold text-white">Portfolios</h2>
-        <MarketMarquee now={now} polling={polling} quotesUpdatedAt={quotesUpdatedAt} quoteStats={quoteStats} autoBackfilling={false} quotes={liveQuotes} />
+        <MarketMarquee now={now} polling={polling} quotesUpdatedAt={quotesUpdatedAt} quoteStats={quoteStats} autoBackfilling={false} quotes={liveQuotes} refreshMs={refreshMs} />
       </div>
 
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="New Portfolio">
@@ -120,6 +122,7 @@ export function PortfolioList({ onSelect }: { onSelect: (id: string) => void }) 
 
 function PortfolioCard({ portfolio: p, onSelect, liveQuotes, allTickers }: { portfolio: any; onSelect: (id: string) => void; liveQuotes: any; allTickers: any }) {
   const { data: summary } = trpc.getPortfolioSummary.useQuery({ portfolioId: p.id }, { staleTime: 60_000 });
+  const [showSettings, setShowSettings] = useState(false);
   const posCount = summary?.positions?.length ?? 0;
   const live = summary ? livePortfolioTotals(summary.positions, liveQuotes) : null;
   const day = summary ? livePortfolioDayChange(summary.positions, liveQuotes, allTickers ?? undefined) : null;
@@ -129,10 +132,18 @@ function PortfolioCard({ portfolio: p, onSelect, liveQuotes, allTickers }: { por
   const glPct = totalCost > 0 ? (gl / totalCost) * 100 : 0;
 
   return (
+    <>
     <button
       onClick={() => onSelect(p.id)}
-      className="bg-gray-900 border border-gray-800 rounded-xl p-5 text-left hover:border-indigo-500/50 transition-colors group"
+      className="bg-gray-900 border border-gray-800 rounded-xl p-5 text-left hover:border-indigo-500/50 transition-colors group relative"
     >
+      <div
+        role="button"
+        onClick={(e) => { e.stopPropagation(); setShowSettings(true); }}
+        className="absolute top-3 right-3 p-1 rounded-md text-gray-600 opacity-0 group-hover:opacity-100 hover:text-gray-300 hover:bg-gray-800 transition-all"
+      >
+        <Settings size={14} />
+      </div>
       <div className="flex items-start justify-between">
         <div>
           <h3 className="text-lg font-semibold text-white group-hover:text-indigo-400 transition-colors">
@@ -143,7 +154,7 @@ function PortfolioCard({ portfolio: p, onSelect, liveQuotes, allTickers }: { por
         {summary && posCount > 0 && (() => {
           const alpha = summary.portfolioAlphaPct ?? 0;
           return (
-            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${alpha >= 0 ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"}`}>
+            <span className={`text-xs font-bold px-2 py-0.5 rounded-full mr-5 ${alpha >= 0 ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"}`}>
               {alpha >= 0 ? "+" : ""}{fmtPctAbs(alpha)} α
             </span>
           );
@@ -175,5 +186,17 @@ function PortfolioCard({ portfolio: p, onSelect, liveQuotes, allTickers }: { por
         </div>
       )}
     </button>
+    {showSettings && (
+      <PortfolioSettings
+        portfolioId={p.id}
+        name={p.name}
+        description={p.description}
+        cutoffDate={p.cutoffDate ?? ""}
+        dipThreshold={p.dipThreshold ?? 5}
+        refreshInterval={p.refreshInterval ?? 300}
+        onClose={() => setShowSettings(false)}
+      />
+    )}
+    </>
   );
 }

@@ -367,7 +367,7 @@ export const PortfolioProjection = projection("portfolios")
 
 // === Query functions ===
 export async function getPortfolios() {
-  return db().select().from(portfolios);
+  return db().select().from(portfolios).orderBy(portfolios.name);
 }
 
 export async function getPortfolio(id: string) {

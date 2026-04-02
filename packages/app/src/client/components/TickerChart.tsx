@@ -11,10 +11,10 @@ let persistedRange: Range = "ALL";
 let persistedShowMA = true;
 let persistedShowBB = false;
 
-export function TickerChart({ symbol, lots, cutoffDate, highlightLot }: { symbol: string; lots: Lot[]; cutoffDate?: string; highlightLot?: HighlightLot }) {
+export function TickerChart({ symbol, lots, cutoffDate, highlightLot, refreshMs = 300_000 }: { symbol: string; lots: Lot[]; cutoffDate?: string; highlightLot?: HighlightLot; refreshMs?: number }) {
   const { data: prices } = trpc.getTickerPrices.useQuery({ symbol, from: "2024-01-01" });
   const { data: overlays } = trpc.getChartOverlays.useQuery({ symbol });
-  const { data: liveQuotes } = trpc.getQuotes.useQuery({ symbols: [symbol] }, { refetchInterval: shouldPollQuotes() ? 300_000 : false });
+  const { data: liveQuotes } = trpc.getQuotes.useQuery({ symbols: [symbol] }, { refetchInterval: shouldPollQuotes() ? refreshMs : false });
   const [showMA, setShowMAState] = useState(persistedShowMA);
   const [showBB, setShowBBState] = useState(persistedShowBB);
   const [range, setRangeState] = useState<Range>(persistedRange);
