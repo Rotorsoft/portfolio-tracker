@@ -1,5 +1,7 @@
-import { LogOut, Terminal } from "lucide-react";
+import { useState } from "react";
+import { LogOut, Terminal, Calendar } from "lucide-react";
 import { Tooltip } from "./Tooltip.js";
+import { HolidayManager } from "./HolidayManager.js";
 import { useAuth } from "../hooks/useAuth.js";
 import { useEventStream } from "../hooks/useEventStream.js";
 import { useNav } from "../hooks/useNav.js";
@@ -16,6 +18,7 @@ export function Shell() {
   const serverDown = useServerDown();
   const { route, nav } = useNav();
 
+  const [showHolidays, setShowHolidays] = useState(false);
   const activeTab = route.page === "events" ? "events" : "portfolios";
 
   if (loading && !serverDown) {
@@ -65,6 +68,11 @@ export function Shell() {
               </h1>
             </button>
             <div className="flex items-center gap-4">
+              <Tooltip label="Market holidays">
+                <button onClick={() => setShowHolidays(true)} className="text-gray-600 hover:text-gray-300 transition-colors">
+                  <Calendar size={14} />
+                </button>
+              </Tooltip>
               <Tooltip label="Event log">
                 <button onClick={() => nav.toEvents()} className={`text-gray-600 hover:text-gray-300 transition-colors ${activeTab === "events" ? "text-gray-300" : ""}`}>
                   <Terminal size={14} />
@@ -91,6 +99,7 @@ export function Shell() {
         )}
         {route.page === "events" && <EventLog events={events} />}
       </main>
+      {showHolidays && <HolidayManager onClose={() => setShowHolidays(false)} />}
     </div>
   );
 }

@@ -1,10 +1,9 @@
 import { drizzle } from "drizzle-orm/postgres-js";
-import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 import { sql } from "drizzle-orm";
 import * as schema from "./schema.js";
 
-export { users, portfolios, positions, lots, tickers, tickerFundamentals, prices } from "./schema.js";
+export { users, portfolios, positions, lots, tickers, tickerFundamentals, marketHolidays, prices } from "./schema.js";
 
 /** PostgresStore deserializes ISO dates to Date objects via dateReviver.
  *  Drizzle text columns need strings. This safely converts. */
@@ -33,20 +32,6 @@ export function db() {
   return _db;
 }
 
-export async function migrateDb(connectionString?: string) {
-  const connStr =
-    connectionString ??
-    process.env.DATABASE_URL ??
-    "postgres://postgres:postgres@localhost:5479/postgres";
-  const migrationClient = postgres(connStr, { max: 1 });
-  const migrationDb = drizzle(migrationClient);
-  const path = await import("node:path");
-  const url = await import("node:url");
-  const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
-  const migrationsFolder = path.resolve(__dirname, "../../drizzle");
-  await migrate(migrationDb, { migrationsFolder });
-  await migrationClient.end();
-}
 
 export async function truncateAll() {
   const d = db();

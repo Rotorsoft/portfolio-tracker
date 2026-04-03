@@ -73,10 +73,24 @@ const _quoteCache = new Map<string, { price: number; previousClose: number; ts: 
 const QUOTE_TTL = 300_000; // 5min
 let _quoteRefreshCount = 0;
 let _lastQuoteRefreshTs = 0;
+let _marketOpen: number | null = null;  // unix seconds
+let _marketClose: number | null = null; // unix seconds
+
+function todayET(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
 
 /** Stats about quote fetching since server start */
-export function getQuoteStats() {
-  return { refreshCount: _quoteRefreshCount, lastRefreshTs: _lastQuoteRefreshTs };
+export async function getQuoteStats() {
+  const { getMarketHoliday } = await import("@rotorsoft/portfolio-tracker-domain");
+  const holidayRow = await getMarketHoliday(todayET());
+  return {
+    refreshCount: _quoteRefreshCount,
+    lastRefreshTs: _lastQuoteRefreshTs,
+    marketOpen: _marketOpen,
+    marketClose: _marketClose,
+    holiday: holidayRow?.name ?? null,
+  };
 }
 
 export async function fetchQuotes(
@@ -109,6 +123,12 @@ export async function fetchQuotes(
           const json = (await res.json()) as any;
           const meta = json.chart?.result?.[0]?.meta;
           if (!meta?.regularMarketPrice) return;
+          // Extract trading period from first successful response
+          const tp = meta.currentTradingPeriod?.regular;
+          if (tp?.start && tp?.end) {
+            _marketOpen = tp.start;
+            _marketClose = tp.end;
+          }
           const entry = {
             price: Math.round(meta.regularMarketPrice * 100) / 100,
             previousClose: meta.chartPreviousClose ?? meta.previousClose ?? 0,
@@ -206,4 +226,59 @@ function extractFundamentals(json: any, symbol: string): Omit<FundamentalsView, 
     sector: ap.sector ?? null,
     industry: ap.industry ?? null,
   };
+}
+
+// === NYSE Holiday Scraper ===
+
+export type ScrapedHoliday = { date: string; name: string; status: "closed" | "early-close" };
+
+/**
+ * Scrapes NYSE's official hours/calendars page and parses market holidays.
+ * Returns structured holiday data for review before saving.
+ */
+export async function fetchNYSEHolidays(): Promise<ScrapedHoliday[]> {
+  const res = await fetch("https://www.nyse.com/markets/hours-calendars", {
+    headers: { "User-Agent": "Mozilla/5.0", Accept: "text/html" },
+  });
+  if (!res.ok) throw new Error(`NYSE fetch failed: ${res.status}`);
+  const html = await res.text();
+
+  const holidays: ScrapedHoliday[] = [];
+
+  // Match table rows: <td>date</td><td>holiday name</td> patterns
+  // NYSE page has multiple tables — we parse all rows with date-like content
+  const rowRe = /<tr[^>]*>\s*<td[^>]*>(.*?)<\/td>\s*<td[^>]*>(.*?)<\/td>/gi;
+  let match;
+  while ((match = rowRe.exec(html)) !== null) {
+    const rawDate = match[1].replace(/<[^>]*>/g, "").trim();
+    const rawName = match[2].replace(/<[^>]*>/g, "").trim();
+    if (!rawName || !rawDate) continue;
+
+    // Try to parse the date (e.g., "January 1, 2026" or "Friday, January 1, 2026")
+    const dateStr = rawDate.replace(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s*/i, "");
+    const parsed = new Date(dateStr);
+    if (isNaN(parsed.getTime())) continue;
+
+    const isoDate = parsed.toISOString().split("T")[0];
+    // Detect early close vs full closure from context
+    const isEarly = /early|1:00\s*p\.?m|1:15\s*p\.?m/i.test(rawName) ||
+      /day after thanksgiving|christmas eve/i.test(rawName);
+
+    holidays.push({
+      date: isoDate,
+      name: rawName,
+      status: isEarly ? "early-close" : "closed",
+    });
+  }
+
+  // Deduplicate by date, preferring "closed" over "early-close"
+  const byDate = new Map<string, ScrapedHoliday>();
+  for (const h of holidays) {
+    const existing = byDate.get(h.date);
+    if (!existing || (h.status === "closed" && existing.status === "early-close")) {
+      byDate.set(h.date, h);
+    }
+  }
+
+  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
 }

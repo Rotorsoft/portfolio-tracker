@@ -4,7 +4,7 @@
  * Prices are written directly by the backfill service.
  */
 import { eq, and, gte, lte, sql } from "drizzle-orm";
-import { db, tickers, tickerFundamentals, prices } from "./drizzle/index.js";
+import { db, tickers, tickerFundamentals, marketHolidays, prices } from "./drizzle/index.js";
 import type { PriceRecord } from "./schemas.js";
 import { sma, volatility30d, yearlyRange, computeCompositeSignal } from "./indicators.js";
 
@@ -290,5 +290,34 @@ async function recomputePositionAnalytics(sym: string) {
   const positionsForTicker = await db().select({ id: positions.id }).from(positions).where(eq(positions.ticker, sym));
   for (const p of positionsForTicker) {
     await recalcPositionAnalytics(p.id);
+  }
+}
+
+// === Market Holidays ===
+
+export async function getMarketHoliday(date: string): Promise<{ date: string; name: string; exchange: string } | undefined> {
+  const rows = await db().select().from(marketHolidays).where(eq(marketHolidays.date, date));
+  return rows[0];
+}
+
+export async function getMarketHolidays(year?: number): Promise<{ date: string; name: string; exchange: string }[]> {
+  if (year) {
+    const from = `${year}-01-01`;
+    const to = `${year}-12-31`;
+    return db().select().from(marketHolidays).where(and(gte(marketHolidays.date, from), lte(marketHolidays.date, to))).orderBy(marketHolidays.date);
+  }
+  return db().select().from(marketHolidays).orderBy(marketHolidays.date);
+}
+
+export async function upsertMarketHolidays(holidays: { date: string; name: string; exchange?: string }[]) {
+  for (const h of holidays) {
+    await db().insert(marketHolidays).values({
+      date: h.date,
+      name: h.name,
+      exchange: h.exchange ?? "NYSE",
+    }).onConflictDoUpdate({
+      target: marketHolidays.date,
+      set: { name: h.name, exchange: h.exchange ?? "NYSE" },
+    });
   }
 }

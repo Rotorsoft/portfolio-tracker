@@ -126,6 +126,12 @@ export const tickerFundamentals = pgTable("ticker_fundamentals", {
   fetchedAt: text("fetched_at").notNull(),
 });
 
+export const marketHolidays = pgTable("market_holidays", {
+  date: text("date").primaryKey(),
+  name: text("name").notNull(),
+  exchange: text("exchange").notNull().default("NYSE"),
+});
+
 export const prices = pgTable(
   "prices",
   {

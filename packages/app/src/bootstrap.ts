@@ -1,6 +1,6 @@
 import { store } from "@rotorsoft/act";
 import { PostgresStore } from "@rotorsoft/act-pg";
-import { app, initDb, migrateDb, db } from "@rotorsoft/portfolio-tracker-domain";
+import { app, initDb, db } from "@rotorsoft/portfolio-tracker-domain";
 import { sql } from "drizzle-orm";
 
 const DB_URL = process.env.DATABASE_URL ?? "postgres://postgres:postgres@localhost:5479/postgres";
@@ -20,7 +20,6 @@ export async function bootstrap() {
 
   // Drizzle projections
   initDb(DB_URL);
-  await migrateDb();
 
   // Unblock stuck projection streams
   await db().execute(

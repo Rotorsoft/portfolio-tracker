@@ -15,11 +15,13 @@ import {
   getTickerFundamentals,
   upsertTickerFundamentals,
   recomputeIndicators,
+  getMarketHolidays,
+  upsertMarketHolidays,
 } from "@rotorsoft/portfolio-tracker-domain";
 import { z } from "zod";
 import { t, authedProcedure, publicProcedure } from "./trpc.js";
 import { doAction } from "./app.js";
-import { fetchPrices, fetchFundamentals, fetchQuotes, getQuoteStats } from "./price-service.js";
+import { fetchPrices, fetchFundamentals, fetchQuotes, getQuoteStats, fetchNYSEHolidays } from "./price-service.js";
 
 export const domainRouter = t.router({
   // === Portfolio CRUD ===
@@ -218,7 +220,22 @@ export const domainRouter = t.router({
       return fetchQuotes(input.symbols.map((s) => s.toUpperCase()));
     }),
 
-  getQuoteStats: publicProcedure.query(() => getQuoteStats()),
+  getQuoteStats: publicProcedure.query(async () => getQuoteStats()),
+
+  // === Market Holidays ===
+  getMarketHolidays: publicProcedure
+    .input(z.object({ year: z.number().optional() }))
+    .query(async ({ input }) => getMarketHolidays(input.year)),
+
+  fetchNYSEHolidays: authedProcedure
+    .query(async () => fetchNYSEHolidays()),
+
+  syncMarketHolidays: authedProcedure
+    .input(z.array(z.object({ date: z.string(), name: z.string(), exchange: z.string().optional() })))
+    .mutation(async ({ input }) => {
+      await upsertMarketHolidays(input);
+      return { count: input.length };
+    }),
 
   // === Analytics ===
   getChartOverlays: publicProcedure

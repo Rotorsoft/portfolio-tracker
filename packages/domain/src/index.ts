@@ -1,5 +1,5 @@
 export { app } from "./bootstrap.js";
-export { initDb, migrateDb, truncateAll, closeDb, db, str } from "./drizzle/index.js";
+export { initDb, truncateAll, closeDb, db, str } from "./drizzle/index.js";
 export {
   User,
   UserSlice,
@@ -34,6 +34,9 @@ export {
   getTickerFundamentals,
   upsertTickerFundamentals,
   type FundamentalsView,
+  getMarketHoliday,
+  getMarketHolidays,
+  upsertMarketHolidays,
 } from "./ticker.js";
 export {
   type AppActor,

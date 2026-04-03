@@ -183,39 +183,47 @@ export function fmtDividendYield(dy: number | null | undefined) {
   return dy != null ? `${(dy * 100).toFixed(2)}%` : "—";
 }
 
+// Market schedule from server (unix seconds from Yahoo Finance currentTradingPeriod)
+let _marketOpen: number | null = null;
+let _marketClose: number | null = null;
+
+/** Update market schedule from quoteStats (called by components that fetch stats) */
+export function updateMarketSchedule(stats: { marketOpen?: number | null; marketClose?: number | null } | undefined) {
+  if (!stats) return;
+  if (stats.marketOpen != null) _marketOpen = stats.marketOpen;
+  if (stats.marketClose != null) _marketClose = stats.marketClose;
+}
+
+/** Whether US market is currently open, based on Yahoo Finance trading period */
+export function isMarketOpen(): boolean {
+  const now = Math.floor(Date.now() / 1000);
+  if (_marketOpen && _marketClose) return now >= _marketOpen && now < _marketClose;
+  // Fallback: basic weekday + hours check (no holiday awareness)
+  return _fallbackMarketCheck(9 * 60 + 30, 16 * 60);
+}
+
+/** Whether we should poll for quotes — during market hours + 30min after close for settlement */
+export function shouldPollQuotes(): boolean {
+  const now = Math.floor(Date.now() / 1000);
+  if (_marketOpen && _marketClose) return now >= _marketOpen && now < _marketClose + 30 * 60;
+  return _fallbackMarketCheck(9 * 60 + 30, 16 * 60 + 30);
+}
+
 /** Last settled trading date — today if market closed and settled, else previous trading day */
 export function lastTradingDate(): string {
-  const now = new Date();
-  const d = new Date(now);
-  // If market is open or still settling, today's close isn't available yet
+  const d = new Date();
   if (shouldPollQuotes()) d.setDate(d.getDate() - 1);
-  // Skip weekends
-  const day = d.getDay();
-  if (day === 0) d.setDate(d.getDate() - 2);
-  if (day === 6) d.setDate(d.getDate() - 1);
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1);
   return d.toISOString().split("T")[0];
 }
 
-/** Whether US market is currently open (Mon-Fri, 9:30am-4pm ET) */
-export function isMarketOpen(): boolean {
+function _fallbackMarketCheck(startMin: number, endMin: number): boolean {
   const now = new Date();
-  const day = now.getDay();
-  if (day === 0 || day === 6) return false;
+  if (now.getDay() === 0 || now.getDay() === 6) return false;
   const etTime = now.toLocaleString("en-US", { timeZone: "America/New_York", hour12: false, hour: "2-digit", minute: "2-digit" });
   const [h, m] = etTime.split(":").map(Number);
   const etMin = h * 60 + m;
-  return etMin >= 9 * 60 + 30 && etMin < 16 * 60;
-}
-
-/** Whether we should poll for quotes — during market hours + 15min after close for settlement */
-export function shouldPollQuotes(): boolean {
-  const now = new Date();
-  const day = now.getDay();
-  if (day === 0 || day === 6) return false;
-  const etTime = now.toLocaleString("en-US", { timeZone: "America/New_York", hour12: false, hour: "2-digit", minute: "2-digit" });
-  const [h, m] = etTime.split(":").map(Number);
-  const etMin = h * 60 + m;
-  return etMin >= 9 * 60 + 30 && etMin < 16 * 60 + 30;
+  return etMin >= startMin && etMin < endMin;
 }
 
 /** Format a relative time like "2h 15m", "4m 15s", or "30s" */
@@ -229,29 +237,38 @@ export function fmtCountdown(ms: number): string {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
-/** Time until market close (4pm ET), or time until market open (9:30am ET) */
-export function marketCountdown(): { label: string; ms: number } {
+/** Time until market close or open, using server-provided trading period */
+export function marketCountdown(isHoliday = false): { label: string; ms: number } {
+  const nowSec = Math.floor(Date.now() / 1000);
+
+  if (_marketOpen && _marketClose) {
+    // Currently open
+    if (nowSec >= _marketOpen && nowSec < _marketClose) {
+      return { label: "closes in", ms: (_marketClose - nowSec) * 1000 };
+    }
+    // Before today's open (server has today's schedule)
+    if (nowSec < _marketOpen && !isHoliday) {
+      return { label: "opens in", ms: (_marketOpen - nowSec) * 1000 };
+    }
+  }
+
+  // Holiday or no valid schedule — we don't know the next open
+  if (isHoliday) {
+    return { label: "", ms: 0 };
+  }
+
+  // Fallback: estimate next open as next weekday 9:30am ET
   const now = new Date();
   const etStr = now.toLocaleString("en-US", { timeZone: "America/New_York", hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
   const [h, m, s] = etStr.split(":").map(Number);
   const etSec = h * 3600 + m * 60 + s;
-  const etMin = h * 60 + m;
   const day = now.getDay();
-  const weekend = day === 0 || day === 6;
 
-  if (!weekend && etMin >= 9 * 60 + 30 && etMin < 16 * 60) {
-    // Market open — time until 4pm ET
-    const closeSec = 16 * 3600;
-    return { label: "closes in", ms: (closeSec - etSec) * 1000 };
-  }
-
-  // Market closed — time until next 9:30am ET
   let daysUntil = 0;
-  if (weekend) {
-    daysUntil = day === 0 ? 1 : 2; // Sun→Mon, Sat→Mon
-  } else if (etMin >= 16 * 60) {
-    daysUntil = day === 5 ? 3 : 1; // Fri after close→Mon, else next day
-  }
+  if (day === 0) daysUntil = 1;
+  else if (day === 6) daysUntil = 2;
+  else if (etSec >= 16 * 3600) daysUntil = day === 5 ? 3 : 1;
+
   const openSec = 9 * 3600 + 30 * 60;
   const secUntilOpen = daysUntil * 86400 + (openSec - etSec);
   return { label: "opens in", ms: Math.max(0, secUntilOpen * 1000) };

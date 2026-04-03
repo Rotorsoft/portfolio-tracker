@@ -1,3 +1,6 @@
+import { execSync } from "node:child_process";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { store, dispose } from "@rotorsoft/act";
 import { PostgresStore } from "@rotorsoft/act-pg";
@@ -5,7 +8,6 @@ import {
   app,
   Portfolio,
   initDb,
-  migrateDb,
   getPortfolios,
   getPortfolio,
   getPosition,
@@ -38,7 +40,7 @@ describe("Integration: projections & queries", () => {
       host: "localhost", port: 5479, database: "portfolio_tracker_test", user: "postgres", password: "postgres",
     }));
     initDb(DB_URL);
-    await migrateDb(DB_URL);
+    execSync(`DATABASE_URL=${DB_URL} pnpm drizzle-kit migrate`, { cwd: dirname(fileURLToPath(import.meta.url)) + "/..", stdio: "pipe" });
     // Clean slate for integration tests
     const { sql: rawSql } = await import("drizzle-orm");
     const d = (await import("../src/drizzle/index.js")).db();

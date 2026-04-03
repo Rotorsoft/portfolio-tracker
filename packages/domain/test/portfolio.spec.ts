@@ -15,7 +15,6 @@ describe("Portfolio lifecycle", () => {
     const snap = await app.load(Portfolio, t.stream);
     expect(snap.state.name).toBe("My Portfolio");
     expect(snap.state.description).toBe("");
-    expect(snap.state.currency).toBe("USD");
     expect(snap.state.status).toBe("active");
     expect(snap.state.createdBy).toBe("user-1");
     expect(snap.state.cutoffDate).toBeUndefined();
@@ -24,12 +23,11 @@ describe("Portfolio lifecycle", () => {
   it("should create with all fields", async () => {
     const t = target();
     await app.do("CreatePortfolio", t, {
-      name: "Full", description: "Desc", currency: "EUR", cutoffDate: "2024-01-01",
+      name: "Full", description: "Desc", cutoffDate: "2024-01-01",
     });
     const snap = await app.load(Portfolio, t.stream);
     expect(snap.state.name).toBe("Full");
     expect(snap.state.description).toBe("Desc");
-    expect(snap.state.currency).toBe("EUR");
     expect(snap.state.cutoffDate).toBe("2024-01-01");
   });
 
@@ -39,7 +37,6 @@ describe("Portfolio lifecycle", () => {
     await app.do("UpdatePortfolio", t, { name: "Updated" });
     const snap = await app.load(Portfolio, t.stream);
     expect(snap.state.name).toBe("Updated");
-    expect(snap.state.currency).toBe("USD"); // unchanged
   });
 
   it("should update cutoff date", async () => {

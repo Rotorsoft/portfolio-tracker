@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState } from "react";
 import { Tooltip } from "./Tooltip.js";
-import { isMarketOpen, marketCountdown, fmtCountdown, lastTradingDate, type LiveQuotes } from "../live.js";
+import { isMarketOpen, marketCountdown, fmtCountdown, lastTradingDate, updateMarketSchedule, type LiveQuotes } from "../live.js";
 import { glColor, fmtDate } from "../fmt.js";
 
 const INDEXES = [
@@ -16,7 +16,7 @@ function fmtIndex(n: number): string {
 type Props = {
   polling: boolean;
   quotesUpdatedAt: number | undefined;
-  quoteStats: { refreshCount: number; lastRefreshTs: number | null } | undefined;
+  quoteStats: { refreshCount: number; lastRefreshTs: number | null; marketOpen?: number | null; marketClose?: number | null; holiday?: string | null } | undefined;
   autoBackfilling: boolean;
   quotes: LiveQuotes | undefined;
   refreshMs?: number;
@@ -28,8 +28,10 @@ export function MarketMarquee({ polling, quotesUpdatedAt, quoteStats, autoBackfi
     const id = setInterval(() => setTick(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
+  updateMarketSchedule(quoteStats);
+  const holiday = quoteStats?.holiday ?? null;
   const open = isMarketOpen();
-  const mc = marketCountdown();
+  const mc = marketCountdown(!!holiday);
   const target = lastTradingDate();
 
   const trackRef = useRef<HTMLDivElement>(null);
@@ -64,9 +66,12 @@ export function MarketMarquee({ polling, quotesUpdatedAt, quoteStats, autoBackfi
       <div className="flex items-center gap-1.5">
         <span className="w-1.5 h-1.5 rounded-full bg-gray-500" />
         <span className="text-gray-400 font-medium">Market Closed</span>
-        <span className="text-gray-500">·</span>
-        <span className="text-gray-300">{mc.label} {fmtCountdown(mc.ms)}</span>
+        {quoteStats?.holiday && <>
+          <span className="text-gray-500">·</span>
+          <span className="text-amber-400">{quoteStats.holiday}</span>
+        </>}
       </div>
+      {mc.ms > 0 && <div className="text-gray-300">{mc.label} {fmtCountdown(mc.ms)}</div>}
       <div className="text-gray-500">Last close {fmtDate(target)}</div>
       {polling && <div className="text-gray-500">Settling...</div>}
     </div>
@@ -110,6 +115,8 @@ export function MarketMarquee({ polling, quotesUpdatedAt, quoteStats, autoBackfi
           <span className={`w-1.5 h-1.5 rounded-full ${open ? "bg-emerald-400 animate-pulse" : "bg-gray-600"}`} />
           {open ? (
             <span className="text-emerald-400 font-medium">Live</span>
+          ) : quoteStats?.holiday ? (
+            <span className="text-amber-500/80">{quoteStats.holiday}</span>
           ) : (
             <span className="text-gray-600">Closed</span>
           )}

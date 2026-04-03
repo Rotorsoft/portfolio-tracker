@@ -3,10 +3,11 @@
   "type": "module",
   "version": "0.0.1",
   "scripts": {
-    "dev:api": "tsx watch src/dev-server.ts",
+    "db:migrate": "cd ../domain && pnpm drizzle-kit migrate",
+    "dev:api": "pnpm db:migrate && tsx watch src/dev-server.ts",
     "dev:client": "vite --host",
     "build": "vite build && tsc -p tsconfig.server.json",
-    "start": "node dist/server.js"
+    "start": "pnpm db:migrate && node dist/server.js"
   },
   "dependencies": {
     "@rotorsoft/portfolio-tracker-domain": "workspace:*",
