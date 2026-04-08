@@ -5,3 +5,4 @@ coverage
 *.local
 /tmp
 /backups
+.DS_Store
