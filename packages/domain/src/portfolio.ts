@@ -275,7 +275,7 @@ export async function recalcPositionAnalytics(positionId: string) {
 // === Projection (Drizzle PG) ===
 export const PortfolioProjection = projection("portfolios")
   .on({ PortfolioCreated })
-  .do(async ({ stream, data, created }) => {
+  .do(async function handlePortfolioCreated({ stream, data, created }) {
     await db().insert(portfolios).values({
       id: stream,
       name: str(data.name),
@@ -293,7 +293,7 @@ export const PortfolioProjection = projection("portfolios")
     });
   })
   .on({ PortfolioUpdated })
-  .do(async ({ stream, data, created }) => {
+  .do(async function handlePortfolioUpdated({ stream, data, created }) {
     const updates: Record<string, unknown> = { updatedAt: created.toISOString() };
     if (data.name !== undefined) updates.name = str(data.name);
     if (data.description !== undefined) updates.description = str(data.description);
@@ -303,11 +303,11 @@ export const PortfolioProjection = projection("portfolios")
     await db().update(portfolios).set(updates).where(eq(portfolios.id, stream));
   })
   .on({ PortfolioArchived })
-  .do(async ({ stream }) => {
+  .do(async function handlePortfolioArchived({ stream }) {
     await db().update(portfolios).set({ status: "archived" }).where(eq(portfolios.id, stream));
   })
   .on({ PositionOpened })
-  .do(async ({ stream, data, created }) => {
+  .do(async function handlePositionOpened({ stream, data, created }) {
     await ensureTicker(str(data.ticker));
     await db().insert(positions).values({
       id: `${stream}:${str(data.ticker)}`,
@@ -326,12 +326,12 @@ export const PortfolioProjection = projection("portfolios")
     });
   })
   .on({ PositionClosed })
-  .do(async ({ stream, data, created }) => {
+  .do(async function handlePositionClosed({ stream, data, created }) {
     const posId = `${stream}:${str(data.ticker)}`;
     await db().update(positions).set({ status: "closed", closedAt: created.toISOString() }).where(eq(positions.id, posId));
   })
   .on({ LotAdded })
-  .do(async ({ stream, data }) => {
+  .do(async function handleLotAdded({ stream, data }) {
     await ensureTicker(str(data.ticker));
     const posId = `${stream}:${str(data.ticker)}`;
     await db().insert(lots).values({
@@ -355,7 +355,7 @@ export const PortfolioProjection = projection("portfolios")
     await recalcPositionAnalytics(posId);
   })
   .on({ LotRemoved })
-  .do(async ({ stream, data }) => {
+  .do(async function handleLotRemoved({ stream, data }) {
     const posId = `${stream}:${str(data.ticker)}`;
     await db().delete(lots).where(eq(lots.id, str(data.lotId)));
     const posLots = await db().select().from(lots).where(eq(lots.positionId, posId));

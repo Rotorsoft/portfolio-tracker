@@ -23,8 +23,8 @@ export function useEventStream() {
       if (evt.name.startsWith("Position") || evt.name.startsWith("Lot")) {
         utils.getPosition.invalidate();
         utils.getPositionsByPortfolio.invalidate();
-        utils.getPosition.invalidate();
         utils.getPortfolioSummary.invalidate();
+        utils.getEntryAnalysis.invalidate();
       }
       if (evt.name.startsWith("Ticker") || evt.name.startsWith("Prices") || evt.name.startsWith("Backfill")) {
         utils.getTickers.invalidate();

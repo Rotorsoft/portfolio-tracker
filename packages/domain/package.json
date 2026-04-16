@@ -9,13 +9,13 @@
     "drizzle:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
-    "@rotorsoft/act": "^0.25.1",
+    "@rotorsoft/act": "^0.30.0",
     "drizzle-orm": "^0.45.1",
     "postgres": "^3.4.7",
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@rotorsoft/act-pg": "^0.14.1",
+    "@rotorsoft/act-pg": "^0.16.0",
     "drizzle-kit": "^0.31.10"
   }
 }

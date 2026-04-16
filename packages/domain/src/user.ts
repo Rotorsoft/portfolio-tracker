@@ -46,7 +46,7 @@ export const User = state({ User: UserState })
 // === Projection (Drizzle PG) ===
 export const UserProjection = projection("users")
   .on({ UserRegistered })
-  .do(async ({ stream, data, created }) => {
+  .do(async function handleUserRegistered({ stream, data, created }) {
     await db()
       .insert(users)
       .values({
@@ -66,7 +66,7 @@ export const UserProjection = projection("users")
       });
   })
   .on({ RoleAssigned })
-  .do(async ({ stream, data }) => {
+  .do(async function handleRoleAssigned({ stream, data }) {
     await db()
       .update(users)
       .set({ role: str(data.role) })
